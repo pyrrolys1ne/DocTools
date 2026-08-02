@@ -73,4 +73,5 @@ def strip_headers(src: Path, dst: Path) -> None:
     """读取一个 .docx，去除页眉后保存到 dst。"""
     doc = Document(str(src))
     clear_headers(doc)
+    dst.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(dst))

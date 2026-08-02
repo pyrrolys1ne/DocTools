@@ -4,6 +4,7 @@ from docx import Document
 from docx.oxml.ns import qn
 from typer.testing import CliRunner
 
+from doctools.batch import build_plan
 from doctools.cli import app
 from doctools.docx import clear_headers, strip_headers
 
@@ -146,3 +147,67 @@ def test_cli_rejects_non_docx(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "仅支持 .docx" in result.stderr
+
+
+def test_build_plan_single_file_output_is_full_path(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    src.write_bytes(b"x")
+    out = tmp_path / "renamed.docx"
+
+    pairs = build_plan(src, out)
+
+    assert pairs == [(src, out)]
+
+
+def test_build_plan_single_file_output_is_dir(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    src.write_bytes(b"x")
+    out_dir = tmp_path / "out"
+
+    pairs = build_plan(src, out_dir, output_is_dir=True)
+
+    assert pairs == [(src, out_dir / "in_cleaned.docx")]
+
+
+def test_build_plan_recursive_mirrors_structure(tmp_path: Path) -> None:
+    src = tmp_path / "in"
+    (src / "sub").mkdir(parents=True)
+    _doc_with_headers().save(str(src / "a.docx"))
+    _doc_with_headers().save(str(src / "sub" / "b.docx"))
+
+    pairs = build_plan(src, tmp_path / "out", recursive=True)
+
+    assert pairs == [
+        (src / "a.docx", tmp_path / "out" / "a.docx"),
+        (src / "sub" / "b.docx", tmp_path / "out" / "sub" / "b.docx"),
+    ]
+
+
+def test_cli_remove_headers_recursive(tmp_path: Path) -> None:
+    src = tmp_path / "in"
+    (src / "sub").mkdir(parents=True)
+    _doc_with_headers().save(str(src / "a.docx"))
+    _doc_with_headers().save(str(src / "sub" / "b.docx"))
+
+    result = runner.invoke(
+        app, ["remove-headers", str(src), "-o", str(tmp_path / "out"), "-r"]
+    )
+
+    assert result.exit_code == 0, result.stdout
+    for out in (tmp_path / "out" / "a.docx", tmp_path / "out" / "sub" / "b.docx"):
+        assert out.exists()
+        doc = Document(str(out))
+        assert all(p.text == "" for s in doc.sections for p in s.header.paragraphs)
+
+
+def test_cli_remove_headers_non_recursive_skips_subdirs(tmp_path: Path) -> None:
+    src = tmp_path / "in"
+    (src / "sub").mkdir(parents=True)
+    _doc_with_headers().save(str(src / "a.docx"))
+    _doc_with_headers().save(str(src / "sub" / "b.docx"))
+
+    result = runner.invoke(app, ["remove-headers", str(src), "-o", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, result.stdout
+    assert (tmp_path / "out" / "a.docx").exists()
+    assert not (tmp_path / "out" / "sub" / "b.docx").exists()
