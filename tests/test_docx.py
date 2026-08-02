@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from docx import Document
+from docx.oxml.ns import qn
 from typer.testing import CliRunner
 
 from doctools.cli import app
@@ -53,6 +54,53 @@ def test_clear_headers_handles_first_page_header() -> None:
     first.paragraphs[0].text = "FIRST PAGE"
     clear_headers(doc)
     assert doc.sections[0].first_page_header.paragraphs[0].text == ""
+
+
+def test_clear_headers_removes_paragraph_border() -> None:
+    """页眉段落的下边框（w:pBdr）是段落格式，去页眉时应一并移除。"""
+    doc = _doc_with_headers()
+    header = doc.sections[0].header
+    header.is_linked_to_previous = False
+    pPr = header.paragraphs[0]._p.get_or_add_pPr()
+    pBdr = pPr.makeelement(qn("w:pBdr"), {})
+    bottom = pPr.makeelement(qn("w:bottom"), {qn("w:val"): "single", qn("w:sz"): "4"})
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+    clear_headers(doc)
+
+    for section in doc.sections:
+        for header in (section.header, section.first_page_header, section.even_page_header):
+            for paragraph in header.paragraphs:
+                _pPr = paragraph._p.find(qn("w:pPr"))
+                assert _pPr is None or _pPr.find(qn("w:pBdr")) is None
+
+
+def _header_style_with_border(doc: Document) -> None:
+    """给文档的 Header 段落样式注入下边框（Word 页眉横线的来源）。"""
+    for style in doc.styles.element.findall(qn("w:style")):
+        if style.get(qn("w:styleId")) != "Header":
+            continue
+        pPr = style.get_or_add_pPr()
+        pBdr = pPr.makeelement(qn("w:pBdr"), {})
+        bottom = pPr.makeelement(qn("w:bottom"), {qn("w:val"): "single", qn("w:sz"): "6"})
+        pBdr.append(bottom)
+        pPr.insert(0, pBdr)
+        return
+
+
+def test_clear_headers_removes_header_style_border() -> None:
+    """Word 页眉横线常来自 Header 样式的 w:pBdr，需从样式定义中一并移除。"""
+    doc = _doc_with_headers()
+    _header_style_with_border(doc)
+
+    clear_headers(doc)
+
+    for style in doc.styles.element.findall(qn("w:style")):
+        if style.get(qn("w:styleId")) != "Header":
+            continue
+        pPr = style.find(qn("w:pPr"))
+        assert pPr is None or pPr.find(qn("w:pBdr")) is None
 
 
 def test_strip_headers_file(tmp_path: Path) -> None:
