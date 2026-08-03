@@ -222,9 +222,6 @@ def image_to_pdf_cmd(
         "-o",
         help="输出目录。合并模式下为单个 PDF 的所在目录",
     ),
-    merge: bool = typer.Option(
-        False, "--merge", help="把所有图片合并成一个 PDF（默认每张图片单独转）"
-    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="只打印将要执行的操作，不写入文件"
     ),
@@ -235,14 +232,13 @@ def image_to_pdf_cmd(
         help="递归处理子目录中的图片，输出目录镜像源目录结构",
     ),
 ) -> None:
-    """把图片转换为 PDF（每张一个，或 --merge 合并为一个）。"""
+    """把图片转换为 PDF（目录内所有图片合成一个，每张一页）。"""
     _run_operation_report(
         "image-to-pdf",
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
         dry_run=dry_run,
-        merge_images=merge,
     )
 
 

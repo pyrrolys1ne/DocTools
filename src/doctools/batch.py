@@ -61,11 +61,12 @@ def _build_plan(
     suffixes: tuple[str, ...],
     dir_out_name,
     file_out_name,
+    default_out_dir: str,
 ) -> list[tuple[Path, Path]]:
     """把输入（文件或目录）展开成 [(源文件, 目标文件)] 处理计划。
 
     ``dir_out_name(src)`` / ``file_out_name(src)`` 分别决定目录模式与
-    单文件模式的输出文件名。
+    单文件模式的输出文件名。缺省输出目录命名为 ``{源名}_{default_out_dir}``。
     """
     if src.is_file():
         if src.suffix.lower() not in suffixes:
@@ -80,7 +81,7 @@ def _build_plan(
     if not src.is_dir():
         raise ValueError(f"路径不存在：{src}")
 
-    out_dir = dst if dst is not None else src.with_name(f"{src.name}_cleaned")
+    out_dir = dst if dst is not None else src.with_name(f"{src.name}_{default_out_dir}")
     files = discover(src, recursive, suffixes)
     if not files:
         raise ValueError(f"目录中没有找到 {'、'.join(suffixes)} 文件：{src}")
@@ -102,6 +103,7 @@ def build_plan(
         (".docx",),
         dir_out_name=lambda s: s.name,
         file_out_name=lambda s: f"{s.stem}_cleaned.docx",
+        default_out_dir="cleaned",
     )
 
 
@@ -118,6 +120,7 @@ def build_convert_plan(
         suffixes,
         dir_out_name=lambda s: f"{s.stem}.pdf",
         file_out_name=lambda s: f"{s.stem}.pdf",
+        default_out_dir="pdf",
     )
 
 
@@ -186,26 +189,17 @@ def run_operation(
             return process_batch(plan, on_progress=on_progress, worker=converter.convert)
 
     if operation == "image-to-pdf":
-        from doctools.images import IMAGE_SUFFIXES, image_to_pdf, merge_images_to_pdf
+        from doctools.images import merge_images_to_pdf
 
-        if merge_images:
-            images = (
-                discover(src, recursive, IMAGE_SUFFIXES)
-                if src.is_dir()
-                else [src]
-            )
-            if not images:
-                raise ValueError(f"目录中没有找到图片文件：{source_path}")
-            out_dir = dst if dst is not None else src.with_name(f"{src.name}_images")
-            target = out_dir / "merged.pdf"
-            if dry_run:
-                return [FileResult(s, target, ok=True) for s in images]
-            return merge_images_to_pdf(images, target, on_progress)
-
-        plan = build_convert_plan(src, dst, recursive, output_is_dir, IMAGE_SUFFIXES)
+        # 图片转 PDF 只保留"多合一"：目录内所有图片（或单个图片）合成一个 PDF
+        images = discover(src, recursive, IMAGE_SUFFIXES) if src.is_dir() else [src]
+        if not images:
+            raise ValueError(f"目录中没有找到图片文件：{source_path}")
+        out_dir = dst if dst is not None else src.with_name(f"{src.stem}_images")
+        target = out_dir / "merged.pdf"
         if dry_run:
-            return [FileResult(s, d, ok=True) for s, d in plan]
-        return process_batch(plan, on_progress=on_progress, worker=image_to_pdf)
+            return [FileResult(s, target, ok=True) for s in images]
+        return merge_images_to_pdf(images, target, on_progress)
 
     if operation == "merge-pdf":
         if not srcs:

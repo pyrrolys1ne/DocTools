@@ -1,6 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Eraser,
   FileText,
   Files,
@@ -9,6 +11,7 @@ import {
   Presentation,
   Split,
   XCircle,
+  type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -26,21 +29,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DirectoryPicker from "./DirectoryPicker";
-import { createJob, getJob, jobWsUrl, scan } from "./api";
+import { createJob, getJob, jobWsUrl } from "./api";
+import { loadRecents, saveRecents, type Recents } from "./recents";
 import type {
   BatchOp,
   CreateJobParams,
   FileResult,
   JobStatus,
   Operation,
-  ScanFile,
 } from "./types";
 
 type Scope = "dir" | "file";
-type Phase = "idle" | "scanning" | "preview" | "running" | "done" | "failed";
+type Phase = "idle" | "running" | "done" | "failed";
+type View = "home" | Operation;
 type PickerTarget =
   | { kind: "batch-source" }
   | { kind: "batch-output" }
@@ -56,18 +58,49 @@ const BATCH_EXTS: Record<BatchOp, string> = {
   "image-to-pdf": ".png,.jpg,.jpeg,.bmp,.gif,.webp,.tif,.tiff",
 };
 
-const SOURCE_HINT: Record<BatchOp, { dir: string; file: string }> = {
-  "remove-headers": { dir: ".docx", file: ".docx" },
-  "word-to-pdf": { dir: "含 .docx/.doc", file: ".docx/.doc" },
-  "ppt-to-pdf": { dir: "含 .pptx/.ppt", file: ".pptx/.ppt" },
-  "image-to-pdf": { dir: "含 png/jpg/…", file: "png/jpg/…" },
+/** 各批量操作的源路径占位说明（行内显示在输入框内）。 */
+const SOURCE_PLACEHOLDER: Record<BatchOp, { dir: string; file: string }> = {
+  "remove-headers": { dir: "选择包含 .docx 的目录", file: "选择或拖入 .docx 文件" },
+  "word-to-pdf": { dir: "选择包含 .docx/.doc 的目录", file: "选择或拖入 .docx/.doc 文件" },
+  "ppt-to-pdf": { dir: "选择包含 .pptx/.ppt 的目录", file: "选择或拖入 .pptx/.ppt 文件" },
+  "image-to-pdf": { dir: "选择包含图片（png/jpg/…）的目录", file: "选择或拖入图片（png/jpg/…）" },
 };
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+/** 各批量操作的输出目录占位说明（标注默认生成的位置）。 */
+const OUTPUT_PLACEHOLDER: Record<BatchOp, { dir: string; file: string }> = {
+  "remove-headers": {
+    dir: "默认生成到源目录旁的 *_cleaned 文件夹",
+    file: "默认生成到源文件旁的 *_cleaned.docx",
+  },
+  "word-to-pdf": {
+    dir: "默认生成到源目录旁的 *_pdf 文件夹",
+    file: "默认生成到源文件旁的同名 .pdf",
+  },
+  "ppt-to-pdf": {
+    dir: "默认生成到源目录旁的 *_pdf 文件夹",
+    file: "默认生成到源文件旁的同名 .pdf",
+  },
+  "image-to-pdf": {
+    dir: "默认生成到源目录旁 *_images 文件夹的 merged.pdf",
+    file: "默认生成到源文件旁 *_images 文件夹的 merged.pdf",
+  },
+};
+
+/** 首页功能宫格：每个功能一个小方块，点开进入对应页面。 */
+const OPERATIONS_META: {
+  op: Operation;
+  title: string;
+  desc: string;
+  icon: LucideIcon;
+  accent: string;
+}[] = [
+  { op: "remove-headers", title: "去页眉", desc: "批量移除 Word 页眉", icon: Eraser, accent: "from-blue-500 to-indigo-500" },
+  { op: "word-to-pdf", title: "Word 转 PDF", desc: ".docx/.doc 转为 PDF", icon: FileText, accent: "from-sky-500 to-blue-600" },
+  { op: "ppt-to-pdf", title: "PPT 转 PDF", desc: ".pptx/.ppt 转为 PDF", icon: Presentation, accent: "from-orange-500 to-amber-500" },
+  { op: "image-to-pdf", title: "图片转 PDF", desc: "多张图片合成一个 PDF", icon: ImageIcon, accent: "from-emerald-500 to-teal-500" },
+  { op: "merge-pdf", title: "合并 PDF", desc: "把多个 PDF 合成一个", icon: Files, accent: "from-violet-500 to-purple-500" },
+  { op: "split-pdf", title: "拆分 PDF", desc: "每页一个或按页码范围", icon: Split, accent: "from-rose-500 to-pink-500" },
+];
 
 function Field({
   label,
@@ -111,16 +144,9 @@ interface BatchFormProps {
   onOutputChange: (v: string) => void;
   recursive: boolean;
   onRecursiveChange: (v: boolean) => void;
-  dryRun: boolean;
-  onDryRunChange: (v: boolean) => void;
-  mergeImages: boolean;
-  onMergeImagesChange: (v: boolean) => void;
   dragOver: boolean;
   onDragOver: (v: boolean) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  showScan: boolean;
-  scanning: boolean;
-  onScan: () => void;
   onStart: () => void;
   busy: boolean;
   onBrowseSource: () => void;
@@ -138,16 +164,9 @@ function BatchForm(props: BatchFormProps) {
     onOutputChange,
     recursive,
     onRecursiveChange,
-    dryRun,
-    onDryRunChange,
-    mergeImages,
-    onMergeImagesChange,
     dragOver,
     onDragOver,
     onDrop,
-    showScan,
-    scanning,
-    onScan,
     onStart,
     busy,
     onBrowseSource,
@@ -176,13 +195,7 @@ function BatchForm(props: BatchFormProps) {
           ))}
         </div>
 
-        <Field
-          label={
-            scope === "dir"
-              ? `源目录（${SOURCE_HINT[op].dir}）`
-              : `源文件（${SOURCE_HINT[op].file}，可直接拖入）`
-          }
-        >
+        <Field label={scope === "dir" ? "源目录" : "源文件"}>
           <div
             className={cn(
               "flex gap-2 rounded-md transition-shadow",
@@ -198,7 +211,9 @@ function BatchForm(props: BatchFormProps) {
             <Input
               value={source}
               onChange={(e) => onSourceChange(e.target.value)}
-              placeholder="例如 D:/Projects/DocTools/docs"
+              placeholder={
+                scope === "dir" ? SOURCE_PLACEHOLDER[op].dir : SOURCE_PLACEHOLDER[op].file
+              }
             />
             <Button type="button" variant="outline" onClick={onBrowseSource}>
               浏览…
@@ -206,21 +221,12 @@ function BatchForm(props: BatchFormProps) {
           </div>
         </Field>
 
-        <Field
-          label={
-            <span>
-              输出目录{" "}
-              <span className="font-normal text-muted-foreground">
-                （留空自动生成 *_cleaned）
-              </span>
-            </span>
-          }
-        >
+        <Field label="输出目录">
           <div className="flex gap-2">
             <Input
               value={output}
               onChange={(e) => onOutputChange(e.target.value)}
-              placeholder="留空则使用默认"
+              placeholder={OUTPUT_PLACEHOLDER[op][scope]}
             />
             <Button type="button" variant="outline" onClick={onBrowseOutput}>
               浏览…
@@ -234,28 +240,9 @@ function BatchForm(props: BatchFormProps) {
               递归子目录
             </CheckOption>
           )}
-          <CheckOption checked={dryRun} onCheckedChange={onDryRunChange}>
-            仅预览（dry-run）
-          </CheckOption>
-          {op === "image-to-pdf" && (
-            <CheckOption checked={mergeImages} onCheckedChange={onMergeImagesChange}>
-              合成一个 PDF（所有图片合并成一个文件）
-            </CheckOption>
-          )}
         </div>
 
         <div className="flex gap-2 pt-1">
-          {showScan && (
-            <Button variant="outline" onClick={onScan} disabled={busy}>
-              {scanning ? (
-                <>
-                  <Loader2 className="animate-spin" /> 扫描中…
-                </>
-              ) : (
-                "扫描"
-              )}
-            </Button>
-          )}
           <Button onClick={onStart} disabled={busy}>
             开始处理
           </Button>
@@ -266,15 +253,13 @@ function BatchForm(props: BatchFormProps) {
 }
 
 export default function App() {
-  const [operation, setOperation] = useState<Operation>("remove-headers");
-  // 批量表单（去页眉 / 转PDF 共用）
+  const [view, setView] = useState<View>("home");
+  // 批量表单（去页眉 / 各转PDF 共用）
   const [scope, setScope] = useState<Scope>("dir");
   const [source, setSource] = useState("");
   const [output, setOutput] = useState("");
   const [recursive, setRecursive] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [dryRun, setDryRun] = useState(false);
-  const [mergeImages, setMergeImages] = useState(false);
   // 合并 PDF
   const [mergeSources, setMergeSources] = useState<string[]>([]);
   const [mergeOutDir, setMergeOutDir] = useState("");
@@ -285,21 +270,53 @@ export default function App() {
   const [splitCustom, setSplitCustom] = useState(false);
   const [splitRanges, setSplitRanges] = useState("");
   // 运行状态
-  const [files, setFiles] = useState<ScanFile[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [job, setJob] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
 
-  const batchOp: BatchOp =
-    operation === "merge-pdf" || operation === "split-pdf"
-      ? "remove-headers"
-      : operation;
-  const showScan = batchOp === "remove-headers" && scope === "dir";
+  // 记住上次使用的源路径 / 输出目录（按操作分组，localStorage 持久化）
+  const [recents, setRecents] = useState<Recents>(loadRecents);
+  const updateRecents = useCallback((fn: (r: Recents) => Recents) => {
+    setRecents((prev) => {
+      const next = fn(prev);
+      saveRecents(next);
+      return next;
+    });
+  }, []);
+  const remember = useCallback(
+    (kind: "source" | "output", op: string, value: string) => {
+      if (!value) return;
+      updateRecents((r) => ({ ...r, [kind]: { ...r[kind], [op]: value } }));
+    },
+    [updateRecents],
+  );
 
-  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  // 进入某个功能页时回填该功能上次使用的路径
+  useEffect(() => {
+    if (view === "home") return;
+    if (view === "merge-pdf") {
+      setMergeOutDir(recents.output?.["merge-pdf"] ?? "");
+      setMergeFileName(recents.mergeFileName ?? "merged.pdf");
+    } else if (view === "split-pdf") {
+      setSplitOutDir(recents.output?.["split-pdf"] ?? "");
+    } else {
+      setSource(recents.source?.[view] ?? "");
+      setOutput(recents.output?.[view] ?? "");
+    }
+    // 仅在切换页面时回填一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  const isBatchOp =
+    view === "remove-headers" ||
+    view === "word-to-pdf" ||
+    view === "ppt-to-pdf" ||
+    view === "image-to-pdf";
+  const batchOp: BatchOp = isBatchOp ? view : "remove-headers";
+
   const progress = job && job.total > 0 ? (job.done / job.total) * 100 : 0;
-  const busy = phase === "running" || phase === "scanning";
+  const busy = phase === "running";
   const okCount = job ? job.results.filter((r) => r.ok).length : 0;
   const failCount = job ? job.results.length - okCount : 0;
 
@@ -337,32 +354,19 @@ export default function App() {
     }
   }, []);
 
-  const onScan = useCallback(async () => {
-    setError(null);
-    setPhase("scanning");
-    try {
-      const result = await scan(source, recursive);
-      setFiles(result.files);
-      setPhase("preview");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setPhase("idle");
-    }
-  }, [source, recursive]);
-
   const onStartBatch = () => {
     if (!source.trim()) {
       setError("请选择源目录或文件");
       return;
     }
+    remember("source", batchOp, source);
+    remember("output", batchOp, output);
     startJob({
       operation: batchOp,
       source_path: source,
       output_path: output,
       recursive,
-      dry_run: dryRun,
       output_is_dir: scope === "file",
-      ...(batchOp === "image-to-pdf" ? { merge_images: mergeImages } : {}),
     });
   };
 
@@ -375,12 +379,13 @@ export default function App() {
       setError("请选择输出目录");
       return;
     }
+    remember("output", "merge-pdf", mergeOutDir);
+    updateRecents((r) => ({ ...r, mergeFileName: mergeFileName.trim() || "merged.pdf" }));
     startJob({
       operation: "merge-pdf",
       source_path: "",
       output_path: `${mergeOutDir.replace(/[\\/]+$/, "")}/${mergeFileName.trim() || "merged.pdf"}`,
       recursive: false,
-      dry_run: false,
       output_is_dir: false,
       sources: mergeSources,
     });
@@ -395,12 +400,12 @@ export default function App() {
       setError("请选择输出目录");
       return;
     }
+    remember("output", "split-pdf", splitOutDir);
     startJob({
       operation: "split-pdf",
       source_path: splitSource,
       output_path: splitOutDir,
       recursive: false,
-      dry_run: false,
       output_is_dir: false,
       page_ranges: splitCustom ? splitRanges : "",
     });
@@ -463,17 +468,31 @@ export default function App() {
         exts={exts}
         multi={multi}
         onSelect={(dir) => {
-          if (k === "batch-source" && scope === "dir") setSource(dir);
-          else if (k === "batch-output") setOutput(dir);
-          else if (k === "merge-output") setMergeOutDir(dir);
-          else if (k === "split-output") setSplitOutDir(dir);
+          if (k === "batch-source" && scope === "dir") {
+            setSource(dir);
+            remember("source", batchOp, dir);
+          } else if (k === "batch-output") {
+            setOutput(dir);
+            remember("output", batchOp, dir);
+          } else if (k === "merge-output") {
+            setMergeOutDir(dir);
+            remember("output", "merge-pdf", dir);
+          } else if (k === "split-output") {
+            setSplitOutDir(dir);
+            remember("output", "split-pdf", dir);
+          }
           setPicker(null);
         }}
         onSelectFile={
           (k === "batch-source" && scope === "file") || k === "split-source"
             ? (path) => {
-                if (k === "batch-source" && scope === "file") setSource(path);
-                else if (k === "split-source") setSplitSource(path);
+                if (k === "batch-source" && scope === "file") {
+                  setSource(path);
+                  remember("source", batchOp, path);
+                } else if (k === "split-source") {
+                  setSplitSource(path);
+                  remember("source", "split-pdf", path);
+                }
                 setPicker(null);
               }
             : undefined
@@ -486,6 +505,8 @@ export default function App() {
       />
     );
   };
+
+  const meta = OPERATIONS_META.find((m) => m.op === view);
 
   return (
     <main className="mx-auto w-full max-w-[780px] px-4 pb-20 pt-8 sm:px-6">
@@ -500,396 +521,267 @@ export default function App() {
               v0.3
             </Badge>
           </h1>
-          <p className="text-sm text-muted-foreground">
-            去页眉 · 转 PDF · 合并/拆分 PDF
-          </p>
+          <p className="text-sm text-muted-foreground">本地文档处理工具</p>
         </div>
       </header>
 
-      <Tabs
-        value={operation}
-        onValueChange={(v) => setOperation(v as Operation)}
-        className="mt-4"
-      >
-        <TabsList className="max-w-full overflow-x-auto">
-          <TabsTrigger value="remove-headers">
-            <Eraser /> 去页眉
-          </TabsTrigger>
-          <TabsTrigger value="word-to-pdf">
-            <FileText /> Word 转 PDF
-          </TabsTrigger>
-          <TabsTrigger value="ppt-to-pdf">
-            <Presentation /> PPT 转 PDF
-          </TabsTrigger>
-          <TabsTrigger value="image-to-pdf">
-            <ImageIcon /> 图片转 PDF
-          </TabsTrigger>
-          <TabsTrigger value="merge-pdf">
-            <Files /> 合并 PDF
-          </TabsTrigger>
-          <TabsTrigger value="split-pdf">
-            <Split /> 拆分 PDF
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="remove-headers">
-          <BatchForm
-            op="remove-headers"
-            scope={scope}
-            onScopeChange={setScope}
-            source={source}
-            onSourceChange={setSource}
-            output={output}
-            onOutputChange={setOutput}
-            recursive={recursive}
-            onRecursiveChange={setRecursive}
-            dryRun={dryRun}
-            onDryRunChange={setDryRun}
-            mergeImages={mergeImages}
-            onMergeImagesChange={setMergeImages}
-            dragOver={dragOver}
-            onDragOver={setDragOver}
-            onDrop={handleDrop}
-            showScan={showScan}
-            scanning={phase === "scanning"}
-            onScan={onScan}
-            onStart={onStartBatch}
-            busy={busy}
-            onBrowseSource={() => setPicker({ kind: "batch-source" })}
-            onBrowseOutput={() => setPicker({ kind: "batch-output" })}
-          />
-        </TabsContent>
-
-        <TabsContent value="word-to-pdf">
-          <BatchForm
-            op="word-to-pdf"
-            scope={scope}
-            onScopeChange={setScope}
-            source={source}
-            onSourceChange={setSource}
-            output={output}
-            onOutputChange={setOutput}
-            recursive={recursive}
-            onRecursiveChange={setRecursive}
-            dryRun={dryRun}
-            onDryRunChange={setDryRun}
-            mergeImages={mergeImages}
-            onMergeImagesChange={setMergeImages}
-            dragOver={dragOver}
-            onDragOver={setDragOver}
-            onDrop={handleDrop}
-            showScan={false}
-            scanning={false}
-            onScan={() => {}}
-            onStart={onStartBatch}
-            busy={busy}
-            onBrowseSource={() => setPicker({ kind: "batch-source" })}
-            onBrowseOutput={() => setPicker({ kind: "batch-output" })}
-          />
-        </TabsContent>
-
-        <TabsContent value="ppt-to-pdf">
-          <BatchForm
-            op="ppt-to-pdf"
-            scope={scope}
-            onScopeChange={setScope}
-            source={source}
-            onSourceChange={setSource}
-            output={output}
-            onOutputChange={setOutput}
-            recursive={recursive}
-            onRecursiveChange={setRecursive}
-            dryRun={dryRun}
-            onDryRunChange={setDryRun}
-            mergeImages={mergeImages}
-            onMergeImagesChange={setMergeImages}
-            dragOver={dragOver}
-            onDragOver={setDragOver}
-            onDrop={handleDrop}
-            showScan={false}
-            scanning={false}
-            onScan={() => {}}
-            onStart={onStartBatch}
-            busy={busy}
-            onBrowseSource={() => setPicker({ kind: "batch-source" })}
-            onBrowseOutput={() => setPicker({ kind: "batch-output" })}
-          />
-        </TabsContent>
-
-        <TabsContent value="image-to-pdf">
-          <BatchForm
-            op="image-to-pdf"
-            scope={scope}
-            onScopeChange={setScope}
-            source={source}
-            onSourceChange={setSource}
-            output={output}
-            onOutputChange={setOutput}
-            recursive={recursive}
-            onRecursiveChange={setRecursive}
-            dryRun={dryRun}
-            onDryRunChange={setDryRun}
-            mergeImages={mergeImages}
-            onMergeImagesChange={setMergeImages}
-            dragOver={dragOver}
-            onDragOver={setDragOver}
-            onDrop={handleDrop}
-            showScan={false}
-            scanning={false}
-            onScan={() => {}}
-            onStart={onStartBatch}
-            busy={busy}
-            onBrowseSource={() => setPicker({ kind: "batch-source" })}
-            onBrowseOutput={() => setPicker({ kind: "batch-output" })}
-          />
-        </TabsContent>
-
-        <TabsContent value="merge-pdf">
-          <Card>
-            <CardContent className="space-y-4 pt-6">
-              <Field label="源文件（.pdf，可多选）">
-                <div className="flex gap-2">
-                  <Input
-                    value={
-                      mergeSources.length > 0 ? `已选 ${mergeSources.length} 个 PDF` : ""
-                    }
-                    readOnly
-                    placeholder="点击浏览，多选要合并的 PDF"
-                    className="cursor-pointer"
-                    onClick={() => setPicker({ kind: "merge-source" })}
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => setPicker({ kind: "merge-source" })}
-                  >
-                    浏览…
-                  </Button>
-                </div>
-              </Field>
-              {mergeSources.length > 0 && (
-                <p className="break-all text-xs text-muted-foreground">
-                  已选：{mergeSources.map((p) => p.split(/[\\/]/).pop()).join("、")}
-                </p>
-              )}
-              <Field
-                label={
-                  <span>
-                    输出目录{" "}
-                    <span className="font-normal text-muted-foreground">
-                      （合并结果保存到该目录）
-                    </span>
-                  </span>
-                }
+      {view === "home" ? (
+        /* ===== 首页：功能宫格 ===== */
+        <section className="mt-6">
+          <p className="mb-3 text-sm text-muted-foreground">选择一个功能开始：</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {OPERATIONS_META.map((m) => (
+              <button
+                key={m.op}
+                type="button"
+                onClick={() => setView(m.op)}
+                className="group flex items-center gap-4 rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
               >
-                <div className="flex gap-2">
-                  <Input
-                    value={mergeOutDir}
-                    onChange={(e) => setMergeOutDir(e.target.value)}
-                    placeholder="输出目录"
-                  />
-                  <Button variant="outline" onClick={() => setPicker({ kind: "merge-output" })}>
-                    浏览…
-                  </Button>
+                <div
+                  className={cn(
+                    "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br text-white shadow-sm",
+                    m.accent,
+                  )}
+                >
+                  <m.icon className="size-6" />
                 </div>
-              </Field>
-              <Field label="合并后文件名">
-                <Input
-                  value={mergeFileName}
-                  onChange={(e) => setMergeFileName(e.target.value)}
-                  placeholder="默认 merged.pdf"
-                />
-              </Field>
-              <div className="pt-1">
-                <Button onClick={onStartMerge} disabled={busy}>
-                  开始合并
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="split-pdf">
-          <Card>
-            <CardContent className="space-y-4 pt-6">
-              <Field label="源文件（.pdf）">
-                <div className="flex gap-2">
-                  <Input
-                    value={splitSource}
-                    onChange={(e) => setSplitSource(e.target.value)}
-                    placeholder="选择要拆分的 .pdf 文件"
-                  />
-                  <Button variant="outline" onClick={() => setPicker({ kind: "split-source" })}>
-                    浏览…
-                  </Button>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{m.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">{m.desc}</p>
                 </div>
-              </Field>
-              <Field label="输出目录">
-                <div className="flex gap-2">
-                  <Input
-                    value={splitOutDir}
-                    onChange={(e) => setSplitOutDir(e.target.value)}
-                    placeholder="拆分成品输出目录"
-                  />
-                  <Button variant="outline" onClick={() => setPicker({ kind: "split-output" })}>
-                    浏览…
-                  </Button>
-                </div>
-              </Field>
-              <div className="space-y-2">
-                <CheckOption checked={splitCustom} onCheckedChange={setSplitCustom}>
-                  自定义页码范围（不勾选则每页一个文件）
-                </CheckOption>
-                {splitCustom && (
-                  <Input
-                    value={splitRanges}
-                    onChange={(e) => setSplitRanges(e.target.value)}
-                    placeholder="如 1-3,5,8-12"
-                  />
-                )}
-              </div>
-              <div className="pt-1">
-                <Button onClick={onStartSplit} disabled={busy}>
-                  开始拆分
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* ===== 扫描结果（仅去页眉·目录模式） ===== */}
-      {operation === "remove-headers" && phase === "scanning" && (
-        <Card>
-          <CardContent className="space-y-3 pt-6">
-            <Skeleton className="h-4 w-40" />
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-8 w-full" />
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </button>
             ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {operation === "remove-headers" &&
-        scope === "dir" &&
-        phase !== "scanning" &&
-        files.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                待处理 {files.length} 个文件 · 共 {formatSize(totalSize)}
-                {recursive && <Badge variant="secondary">含子目录</Badge>}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[280px] rounded-md border">
-                <ul className="divide-y">
-                  {files.map((f) => (
-                    <li
-                      key={f.name}
-                      className="flex items-center justify-between gap-3 px-3 py-2"
-                    >
-                      <span className="flex min-w-0 items-center gap-2 font-mono text-xs">
-                        <FileText className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{f.name}</span>
-                      </span>
-                      <span className="tabular shrink-0 text-xs text-muted-foreground">
-                        {formatSize(f.size)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        )}
-
-      {operation === "remove-headers" &&
-        scope === "dir" &&
-        phase === "idle" &&
-        files.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            选择源目录后点击「扫描」查看待处理文件。
+          </div>
+          <p className="mt-10 text-center text-xs text-muted-foreground">
+            处理在本地完成，文件不会上传。
           </p>
-        )}
-
-      {error && (
-        <div className="mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <XCircle className="mt-0.5 size-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* ===== 运行进度 ===== */}
-      {phase === "running" && job && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Loader2 className="size-4 animate-spin" /> 处理中… {job.done}/{job.total}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Progress
-              value={progress}
-              indicatorClassName="bg-linear-to-r from-primary to-fuchsia-500"
-            />
-            {job.current && (
-              <p className="truncate text-sm text-muted-foreground">当前：{job.current}</p>
+        </section>
+      ) : (
+        /* ===== 功能页 ===== */
+        <>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setView("home")}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronLeft className="size-4" /> 返回
+            </button>
+            {meta && (
+              <div className="mt-2 flex items-center gap-3">
+                <div
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br text-white shadow-sm",
+                    meta.accent,
+                  )}
+                >
+                  <meta.icon className="size-4" />
+                </div>
+                <h2 className="text-lg font-bold">{meta.title}</h2>
+              </div>
             )}
-          </CardContent>
-        </Card>
-      )}
+          </div>
 
-      {/* ===== 完成 ===== */}
-      {phase === "done" && job && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CheckCircle2 className="size-4 text-success" /> 完成
-            </CardTitle>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Badge variant="secondary" className="tabular">
-                共 {job.total}
-              </Badge>
-              <Badge variant="success" className="tabular">
-                ✓ 成功 {okCount}
-              </Badge>
-              {failCount > 0 && (
-                <Badge variant="destructive" className="tabular">
-                  ✕ 失败 {failCount}
-                </Badge>
-              )}
+          {view === "merge-pdf" ? (
+            <Card className="mt-4">
+              <CardContent className="space-y-4 pt-6">
+                <Field label="源文件">
+                  <div className="flex gap-2">
+                    <Input
+                      value={mergeSources.length > 0 ? `已选 ${mergeSources.length} 个 PDF` : ""}
+                      readOnly
+                      placeholder="点击浏览，多选要合并的 PDF"
+                      className="cursor-pointer"
+                      onClick={() => setPicker({ kind: "merge-source" })}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => setPicker({ kind: "merge-source" })}
+                    >
+                      浏览…
+                    </Button>
+                  </div>
+                </Field>
+                {mergeSources.length > 0 && (
+                  <p className="break-all text-xs text-muted-foreground">
+                    已选：{mergeSources.map((p) => p.split(/[\\/]/).pop()).join("、")}
+                  </p>
+                )}
+                <Field label="输出目录">
+                  <div className="flex gap-2">
+                    <Input
+                      value={mergeOutDir}
+                      onChange={(e) => setMergeOutDir(e.target.value)}
+                      placeholder="合并结果保存到该目录"
+                    />
+                    <Button variant="outline" onClick={() => setPicker({ kind: "merge-output" })}>
+                      浏览…
+                    </Button>
+                  </div>
+                </Field>
+                <Field label="合并后文件名">
+                  <Input
+                    value={mergeFileName}
+                    onChange={(e) => setMergeFileName(e.target.value)}
+                    placeholder="默认 merged.pdf"
+                  />
+                </Field>
+                <div className="pt-1">
+                  <Button onClick={onStartMerge} disabled={busy}>
+                    开始合并
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : view === "split-pdf" ? (
+            <Card className="mt-4">
+              <CardContent className="space-y-4 pt-6">
+                <Field label="源文件">
+                  <div className="flex gap-2">
+                    <Input
+                      value={splitSource}
+                      onChange={(e) => setSplitSource(e.target.value)}
+                      placeholder="选择要拆分的 .pdf 文件"
+                    />
+                    <Button variant="outline" onClick={() => setPicker({ kind: "split-source" })}>
+                      浏览…
+                    </Button>
+                  </div>
+                </Field>
+                <Field label="输出目录">
+                  <div className="flex gap-2">
+                    <Input
+                      value={splitOutDir}
+                      onChange={(e) => setSplitOutDir(e.target.value)}
+                      placeholder="默认生成到源文件旁的 *_split 文件夹"
+                    />
+                    <Button variant="outline" onClick={() => setPicker({ kind: "split-output" })}>
+                      浏览…
+                    </Button>
+                  </div>
+                </Field>
+                <div className="space-y-2">
+                  <CheckOption checked={splitCustom} onCheckedChange={setSplitCustom}>
+                    自定义页码范围
+                  </CheckOption>
+                  <p className="text-xs text-muted-foreground">
+                    不勾选时每页拆成一个文件
+                  </p>
+                  {splitCustom && (
+                    <Input
+                      value={splitRanges}
+                      onChange={(e) => setSplitRanges(e.target.value)}
+                      placeholder="如 1-3,5,8-12"
+                    />
+                  )}
+                </div>
+                <div className="pt-1">
+                  <Button onClick={onStartSplit} disabled={busy}>
+                    开始拆分
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="mt-4">
+              <BatchForm
+                op={view}
+                scope={scope}
+                onScopeChange={setScope}
+                source={source}
+                onSourceChange={setSource}
+                output={output}
+                onOutputChange={setOutput}
+                recursive={recursive}
+                onRecursiveChange={setRecursive}
+                dragOver={dragOver}
+                onDragOver={setDragOver}
+                onDrop={handleDrop}
+                onStart={onStartBatch}
+                busy={busy}
+                onBrowseSource={() => setPicker({ kind: "batch-source" })}
+                onBrowseOutput={() => setPicker({ kind: "batch-output" })}
+              />
             </div>
-          </CardHeader>
-          <CardContent>
-            {job.results.length > 0 ? (
-              <ResultList results={job.results} />
-            ) : (
-              <p className="text-sm text-muted-foreground">无处理结果。</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ===== 失败 ===== */}
-      {phase === "failed" && job && (
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <XCircle className="size-4 text-destructive" /> 处理失败
-            </CardTitle>
-            <CardDescription>{job.error ?? "未知错误"}</CardDescription>
-          </CardHeader>
-          {job.results.length > 0 && (
-            <CardContent>
-              <ResultList results={job.results} />
-            </CardContent>
           )}
-        </Card>
-      )}
 
-      <footer className="pt-6 text-center text-xs text-muted-foreground">
-        处理在本地完成，文件不会上传。
-      </footer>
+          {error && (
+            <div className="mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <XCircle className="mt-0.5 size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* ===== 运行进度 ===== */}
+          {phase === "running" && job && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Loader2 className="size-4 animate-spin" /> 处理中… {job.done}/{job.total}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Progress
+                  value={progress}
+                  indicatorClassName="bg-linear-to-r from-primary to-fuchsia-500"
+                />
+                {job.current && (
+                  <p className="truncate text-sm text-muted-foreground">当前：{job.current}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ===== 完成 ===== */}
+          {phase === "done" && job && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2 className="size-4 text-success" /> 完成
+                </CardTitle>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Badge variant="secondary" className="tabular">
+                    共 {job.total}
+                  </Badge>
+                  <Badge variant="success" className="tabular">
+                    ✓ 成功 {okCount}
+                  </Badge>
+                  {failCount > 0 && (
+                    <Badge variant="destructive" className="tabular">
+                      ✕ 失败 {failCount}
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {job.results.length > 0 ? (
+                  <ResultList results={job.results} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">无处理结果。</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ===== 失败 ===== */}
+          {phase === "failed" && job && (
+            <Card className="mt-4 border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <XCircle className="size-4 text-destructive" /> 处理失败
+                </CardTitle>
+                <CardDescription>{job.error ?? "未知错误"}</CardDescription>
+              </CardHeader>
+              {job.results.length > 0 && (
+                <CardContent>
+                  <ResultList results={job.results} />
+                </CardContent>
+              )}
+            </Card>
+          )}
+        </>
+      )}
 
       {renderPicker()}
     </main>

@@ -422,7 +422,8 @@ def _make_img(path: Path) -> None:
     Image.new("RGB", (80, 80), (10, 20, 30)).save(path)
 
 
-def test_job_image_to_pdf_each(tmp_path: Path) -> None:
+def test_job_image_to_pdf_merges_all(tmp_path: Path) -> None:
+    """图片转 PDF 只保留多合一：目录内所有图片合成一个 PDF。"""
     _make_img(tmp_path / "a.png")
     _make_img(tmp_path / "b.png")
     out = tmp_path / "out"
@@ -430,29 +431,6 @@ def test_job_image_to_pdf_each(tmp_path: Path) -> None:
     resp = client.post(
         "/api/jobs",
         json={"operation": "image-to-pdf", "source_path": str(tmp_path), "output_path": str(out)},
-    )
-    job_id = resp.json()["id"]
-
-    data = _wait_done(job_id)
-    assert data["status"] == "done"
-    assert data["total"] == 2
-    assert (out / "a.pdf").exists()
-    assert (out / "b.pdf").exists()
-
-
-def test_job_image_to_pdf_merge(tmp_path: Path) -> None:
-    _make_img(tmp_path / "a.png")
-    _make_img(tmp_path / "b.png")
-    out = tmp_path / "out"
-
-    resp = client.post(
-        "/api/jobs",
-        json={
-            "operation": "image-to-pdf",
-            "source_path": str(tmp_path),
-            "output_path": str(out),
-            "merge_images": True,
-        },
     )
     job_id = resp.json()["id"]
 

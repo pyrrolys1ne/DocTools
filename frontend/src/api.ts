@@ -3,7 +3,6 @@ import type {
   DrivesResult,
   ExploreResult,
   JobStatus,
-  ScanResult,
 } from "./types";
 
 async function get<T>(path: string): Promise<T> {
@@ -34,10 +33,6 @@ export function explore(dir: string, exts = ".docx"): Promise<ExploreResult> {
 
 export function drives(): Promise<DrivesResult> {
   return get<DrivesResult>("/api/drives");
-}
-
-export function scan(sourcePath: string, recursive: boolean): Promise<ScanResult> {
-  return post<ScanResult>("/api/scan", { source_path: sourcePath, recursive });
 }
 
 export function createJob(opts: CreateJobParams): Promise<{ id: string }> {
