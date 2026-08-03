@@ -10,8 +10,15 @@
   连同页眉文字下方的**横线**（段落边框 + Header 样式边框）一并移除
   - ✅ 支持**递归**处理子目录（`--recursive`），输出目录镜像源目录结构
   - ✅ 单文件失败不影响整批；`--dry-run` 预览
-- ✅ **本地 Web 界面**：浏览器里浏览/选择目录、扫描预览、实时进度与逐文件结果；
-  支持**目录批量**与**单个文件**两种模式（FastAPI + React）
+- ✅ `word-to-pdf` / `ppt-to-pdf`：Word（`.docx/.doc`）、PPT（`.pptx/.ppt`）转 PDF
+  - 基于本机 **Microsoft Office COM 自动化**（需安装 Office + `pip install "doctools[office]"`）
+- ✅ `image-to-pdf`：图片（png/jpg/bmp/gif/webp/tiff…）转 PDF —— 每张一个，
+  或 `--merge` 把所有图片合成一个 PDF
+- ✅ `merge-pdf`：按选择顺序把多个 PDF 合并为一个
+- ✅ `split-pdf`：拆分 PDF —— 每页一个文件，或按自定义页码范围（如 `1-3,5,8-12`）
+- ✅ **本地 Web 界面**：浏览器里浏览/选择目录、实时进度与逐文件结果；
+  支持 **去页眉 / Word 转 PDF / PPT 转 PDF / 图片转 PDF / 合并 PDF / 拆分 PDF**
+  六种操作（FastAPI + React）
 - 🚧 PDF 转 PPT（规划中）
 
 ## 安装
@@ -28,7 +35,8 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-pip install -e ".[dev,web]"   # web extra 提供本地 Web 界面所需依赖
+pip install -e ".[dev,web]"   # 本地 Web 界面所需依赖
+pip install -e ".[office]"    # 转 PDF 需要（Windows + 本机已装 Microsoft Office）
 ```
 
 ## 使用
@@ -57,6 +65,29 @@ doctools remove-headers ./docs -o ./docs_cleaned --recursive
 
 ```bash
 doctools remove-headers ./docs --dry-run
+```
+
+Word / PPT / 图片 转 PDF（需要本机 Office，图片则无需 Office）：
+
+```bash
+doctools word-to-pdf 文档.docx -o 输出目录
+doctools ppt-to-pdf ./slides -o ./slides_pdf --recursive
+doctools image-to-pdf 扫描件.png -o 输出目录
+doctools image-to-pdf ./图片 -o 输出目录 --merge   # 合并为一个 PDF
+# 旧的混合命令仍可用：doctools to-pdf ...
+```
+
+合并多个 PDF：
+
+```bash
+doctools merge-pdf 1.pdf 2.pdf 3.pdf -o merged.pdf
+```
+
+拆分 PDF（每页一个，或按页码范围）：
+
+```bash
+doctools split-pdf 文档.pdf -o ./拆分结果
+doctools split-pdf 文档.pdf -o ./拆分结果 --ranges "1-3,5,8-12"
 ```
 
 查看帮助：
@@ -89,7 +120,7 @@ cd frontend && npm run build
 python -m web        # 打开 http://127.0.0.1:8000 即是界面
 ```
 
-界面流程：浏览或输入源目录 / 输出目录 → 扫描预览 → 开始处理 → 实时进度 + 逐文件 OK/FAIL 结果。
+界面顶部选择操作：**去页眉**（目录/单文件，可扫描预览）· **转 PDF** · **合并 PDF**（多选文件）· **拆分 PDF**（每页或页码范围）。流程：浏览或输入路径 → 开始处理 → 实时进度 + 逐文件 OK/FAIL 结果。
 
 ## 架构
 
@@ -108,7 +139,10 @@ ruff check src tests web      # 代码检查
 - [x] 阶段 0：项目脚手架 + Word 批量去页眉
 - [x] 去页眉连横线（段落边框 + Header 样式边框）
 - [x] 递归子目录
-- [x] 本地 Web 界面骨架
+- [x] 本地 Web 界面（shadcn/ui + Tailwind）
+- [x] 转 PDF（Word / PPT，基于 Office COM）
+- [x] 图片转 PDF（每张一个 / 合并）
+- [x] PDF 合并 / 拆分
 - [ ] PDF 转 PPT
 - [ ] Word 统一格式（字体、页边距等）
 - [ ] 文档站（MkDocs）

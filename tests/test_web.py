@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
+from pypdf import PdfReader, PdfWriter
 
 pytest.importorskip("fastapi")
 
@@ -132,6 +133,20 @@ def test_scan_404_on_missing_dir(tmp_path: Path) -> None:
     assert resp.status_code == 404
 
 
+def test_explore_filters_files_by_ext(tmp_path: Path) -> None:
+    (tmp_path / "a.docx").write_bytes(b"x")
+    (tmp_path / "b.pdf").write_bytes(b"x")
+    (tmp_path / "c.pptx").write_bytes(b"x")
+
+    resp = client.get(f"/api/explore?dir={tmp_path}&exts=.pdf")
+
+    assert resp.status_code == 200
+    assert resp.json()["files"] == ["b.pdf"]
+
+    resp2 = client.get(f"/api/explore?dir={tmp_path}&exts=.docx,.pptx")
+    assert resp2.json()["files"] == ["a.docx", "c.pptx"]
+
+
 def test_scan_single_file(tmp_path: Path) -> None:
     _doc_with_headers().save(str(tmp_path / "a.docx"))
 
@@ -234,3 +249,215 @@ def test_job_ws_streams_progress(tmp_path: Path) -> None:
         data = ws.receive_json()
         assert data["id"] == job_id
         assert data["status"] in ("pending", "running", "done", "failed")
+
+
+# ---------- PDF 合并 / 拆分 / 转 PDF ----------
+
+
+def _make_pdf(path: Path, pages: int) -> None:
+    writer = PdfWriter()
+    for _ in range(pages):
+        writer.add_blank_page(width=200, height=200)
+    with path.open("wb") as f:
+        writer.write(f)
+
+
+def test_job_merge_pdf(tmp_path: Path) -> None:
+    a, b = tmp_path / "a.pdf", tmp_path / "b.pdf"
+    _make_pdf(a, 2)
+    _make_pdf(b, 3)
+    merged = tmp_path / "merged.pdf"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "merge-pdf",
+            "output_path": str(merged),
+            "sources": [str(a), str(b)],
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id)
+    assert data["status"] == "done"
+    assert data["total"] == 2
+    assert merged.exists()
+    assert len(PdfReader(str(merged)).pages) == 5
+
+
+def test_job_merge_requires_sources(tmp_path: Path) -> None:
+    resp = client.post(
+        "/api/jobs",
+        json={"operation": "merge-pdf", "output_path": str(tmp_path / "m.pdf")},
+    )
+    job_id = resp.json()["id"]
+    data = _wait_done(job_id)
+    assert data["status"] == "failed"
+    assert "源文件" in data["error"]
+
+
+def test_job_split_pdf_ranges(tmp_path: Path) -> None:
+    src = tmp_path / "in.pdf"
+    _make_pdf(src, 5)
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "split-pdf",
+            "source_path": str(src),
+            "output_path": str(out),
+            "page_ranges": "1-2,4",
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id)
+    assert data["status"] == "done"
+    assert sorted(Path(r["dst"]).name for r in data["results"]) == ["in_p1-2.pdf", "in_p4.pdf"]
+    assert (out / "in_p1-2.pdf").exists()
+
+
+def test_job_split_pdf_every_page(tmp_path: Path) -> None:
+    src = tmp_path / "in.pdf"
+    _make_pdf(src, 3)
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={"operation": "split-pdf", "source_path": str(src), "output_path": str(out)},
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id)
+    assert data["status"] == "done"
+    assert data["total"] == 3
+    assert len(list(out.glob("*.pdf"))) == 3
+
+
+def test_job_split_requires_file(tmp_path: Path) -> None:
+    resp = client.post(
+        "/api/jobs",
+        json={"operation": "split-pdf", "source_path": str(tmp_path)},
+    )
+    job_id = resp.json()["id"]
+    data = _wait_done(job_id)
+    assert data["status"] == "failed"
+    assert "单个 PDF 文件" in data["error"]
+
+
+def _word_available() -> bool:
+    """检查本机是否装有 Microsoft Word（不启动 COM，避免测试互相干扰）。"""
+    import os  # noqa: PLC0415
+
+    program_files = [
+        Path(os.environ.get("ProgramFiles", "C:/Program Files")),
+        Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")),
+    ]
+    return any(
+        (base / "Microsoft Office" / "root" / "Office16" / "WINWORD.EXE").exists()
+        for base in program_files
+    )
+
+
+def test_job_word_to_pdf(tmp_path: Path) -> None:
+    if not _word_available():
+        pytest.skip("本机未安装 Microsoft Office")
+    from docx import Document  # noqa: PLC0415
+
+    doc = Document()
+    doc.add_paragraph("hello")
+    src = tmp_path / "a.docx"
+    doc.save(str(src))
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "word-to-pdf",
+            "source_path": str(src),
+            "output_path": str(out),
+            "output_is_dir": True,
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id, timeout=60)
+    assert data["status"] == "done"
+    assert (out / "a.pdf").exists()
+
+
+def test_job_ppt_to_pdf(tmp_path: Path) -> None:
+    if not _word_available():
+        pytest.skip("本机未安装 Microsoft Office")
+    from pptx import Presentation  # noqa: PLC0415
+    from pptx.util import Inches  # noqa: PLC0415
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(2)).text_frame.text = "测试"
+    src = tmp_path / "a.pptx"
+    prs.save(str(src))
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "ppt-to-pdf",
+            "source_path": str(src),
+            "output_path": str(out),
+            "output_is_dir": True,
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id, timeout=60)
+    assert data["status"] == "done"
+    assert (out / "a.pdf").exists()
+
+
+def _make_img(path: Path) -> None:
+    from PIL import Image  # noqa: PLC0415
+
+    Image.new("RGB", (80, 80), (10, 20, 30)).save(path)
+
+
+def test_job_image_to_pdf_each(tmp_path: Path) -> None:
+    _make_img(tmp_path / "a.png")
+    _make_img(tmp_path / "b.png")
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={"operation": "image-to-pdf", "source_path": str(tmp_path), "output_path": str(out)},
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id)
+    assert data["status"] == "done"
+    assert data["total"] == 2
+    assert (out / "a.pdf").exists()
+    assert (out / "b.pdf").exists()
+
+
+def test_job_image_to_pdf_merge(tmp_path: Path) -> None:
+    _make_img(tmp_path / "a.png")
+    _make_img(tmp_path / "b.png")
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "image-to-pdf",
+            "source_path": str(tmp_path),
+            "output_path": str(out),
+            "merge_images": True,
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id)
+    assert data["status"] == "done"
+    assert data["total"] == 2
+    assert (out / "merged.pdf").exists()
+    assert len(PdfReader(str(out / "merged.pdf")).pages) == 2

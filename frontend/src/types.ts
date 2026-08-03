@@ -36,6 +36,30 @@ export interface FileResult {
   error: string | null;
 }
 
+export type Operation =
+  | "remove-headers"
+  | "word-to-pdf"
+  | "ppt-to-pdf"
+  | "image-to-pdf"
+  | "merge-pdf"
+  | "split-pdf";
+
+/** 使用批量表单（源目录/单文件 + 递归 + dry-run）的操作。 */
+export type BatchOp = "remove-headers" | "word-to-pdf" | "ppt-to-pdf" | "image-to-pdf";
+
+export interface CreateJobParams {
+  operation: Operation;
+  source_path: string;
+  output_path: string;
+  recursive: boolean;
+  dry_run: boolean;
+  output_is_dir: boolean;
+  sources?: string[];
+  page_ranges?: string;
+  /** 图片转 PDF：true 把所有图片合成一个 PDF，否则每张一个。 */
+  merge_images?: boolean;
+}
+
 export type JobState = "pending" | "running" | "done" | "failed";
 
 export interface JobStatus {

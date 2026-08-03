@@ -1,4 +1,10 @@
-import type { DrivesResult, ExploreResult, JobStatus, ScanResult } from "./types";
+import type {
+  CreateJobParams,
+  DrivesResult,
+  ExploreResult,
+  JobStatus,
+  ScanResult,
+} from "./types";
 
 async function get<T>(path: string): Promise<T> {
   const resp = await fetch(path);
@@ -20,8 +26,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return resp.json() as Promise<T>;
 }
 
-export function explore(dir: string): Promise<ExploreResult> {
-  return get<ExploreResult>(`/api/explore?dir=${encodeURIComponent(dir)}`);
+export function explore(dir: string, exts = ".docx"): Promise<ExploreResult> {
+  return get<ExploreResult>(
+    `/api/explore?dir=${encodeURIComponent(dir)}&exts=${encodeURIComponent(exts)}`,
+  );
 }
 
 export function drives(): Promise<DrivesResult> {
@@ -32,13 +40,7 @@ export function scan(sourcePath: string, recursive: boolean): Promise<ScanResult
   return post<ScanResult>("/api/scan", { source_path: sourcePath, recursive });
 }
 
-export function createJob(opts: {
-  source_path: string;
-  output_path: string;
-  recursive: boolean;
-  dry_run: boolean;
-  output_is_dir: boolean;
-}): Promise<{ id: string }> {
+export function createJob(opts: CreateJobParams): Promise<{ id: string }> {
   return post<{ id: string }>("/api/jobs", opts);
 }
 

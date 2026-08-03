@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 
 from doctools import __version__
-from doctools.batch import FileResult, build_plan, process_batch
+from doctools.batch import FileResult, build_plan, process_batch, run_operation
 
 app = typer.Typer(
     name="doctools",
@@ -83,3 +83,221 @@ def remove_headers_cmd(
     results = process_batch(pairs, on_progress=_report)
     if any(not r.ok for r in results):
         raise typer.Exit(1)
+
+
+def _run_operation_report(operation: str, **kwargs) -> None:
+    """执行 run_operation 并逐条上报、按失败结果设置退出码。"""
+    try:
+        results = run_operation(operation, on_progress=_report, **kwargs)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    for result in results:
+        if not result.ok:
+            typer.echo(f"[FAIL] {result.src}: {result.error}", err=True)
+    if any(not r.ok for r in results):
+        raise typer.Exit(1)
+
+
+@app.command("to-pdf")
+def to_pdf_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 Office 文件（.docx/.doc/.pptx/.ppt）或包含它们的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的文件，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """把 Word/PPT 文档转换为 PDF（自动按后缀选择引擎，需要本机 Microsoft Office）。"""
+    _run_operation_report(
+        "to-pdf",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("word-to-pdf")
+def word_to_pdf_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 Word 文件（.docx/.doc）或包含它们的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的文件，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """把 Word 文档转换为 PDF（需要本机安装 Microsoft Office）。"""
+    _run_operation_report(
+        "word-to-pdf",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("ppt-to-pdf")
+def ppt_to_pdf_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 PowerPoint 文件（.pptx/.ppt）或包含它们的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的文件，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """把 PowerPoint 演示文稿转换为 PDF（需要本机安装 Microsoft Office）。"""
+    _run_operation_report(
+        "ppt-to-pdf",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("image-to-pdf")
+def image_to_pdf_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的图片文件（.png/.jpg/...）或包含它们的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出目录。合并模式下为单个 PDF 的所在目录",
+    ),
+    merge: bool = typer.Option(
+        False, "--merge", help="把所有图片合并成一个 PDF（默认每张图片单独转）"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的图片，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """把图片转换为 PDF（每张一个，或 --merge 合并为一个）。"""
+    _run_operation_report(
+        "image-to-pdf",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+        merge_images=merge,
+    )
+
+
+@app.command("merge-pdf")
+def merge_pdf_cmd(
+    files: list[Path] = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="要合并的 PDF 文件（按命令行顺序合并）",
+    ),
+    output: Path = typer.Option(
+        ..., "--output", "-o", help="合并后的输出 PDF 文件路径"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+) -> None:
+    """把多个 PDF 按顺序合并为一个。"""
+    _run_operation_report(
+        "merge-pdf",
+        source_path="",
+        output_path=str(output),
+        dry_run=dry_run,
+        sources=[str(f) for f in files],
+    )
+
+
+@app.command("split-pdf")
+def split_pdf_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="要拆分的 PDF 文件",
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="输出目录。默认生成 {stem}_split"
+    ),
+    ranges: str = typer.Option(
+        "", "--ranges", help='页码范围，如 "1-3,5,8-12"；留空则每页一个文件'
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+) -> None:
+    """把 PDF 拆分成多个文件（每页一个，或按页码范围）。"""
+    _run_operation_report(
+        "split-pdf",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        dry_run=dry_run,
+        page_ranges=ranges,
+    )

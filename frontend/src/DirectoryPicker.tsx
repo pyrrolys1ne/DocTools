@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { drives, explore } from "./api";
 import type { ExploreResult, SpecialFolder } from "./types";
 
@@ -35,35 +36,48 @@ interface Props {
   title: string;
   onSelect: (dir: string) => void;
   onClose: () => void;
+  /** 文件列表按这些扩展名过滤（逗号分隔，默认 .docx）。 */
+  exts?: string;
+  /** 多选模式：文件行变复选框，跨目录保留选中项。 */
+  multi?: boolean;
   /** 提供时 .docx 文件可点击选中（选择单个文件模式）。 */
   onSelectFile?: (path: string) => void;
+  /** multi 模式下确认选择时回调（绝对路径数组，按选择顺序）。 */
+  onSelectFiles?: (paths: string[]) => void;
 }
 
-/** 文件系统浏览弹窗：通过后端 /api/explore 浏览本机目录或选择单个 .docx。 */
+/** 文件系统浏览弹窗：通过后端 /api/explore 浏览本机目录/选择文件。 */
 export default function DirectoryPicker({
   initial,
   title,
   onSelect,
   onClose,
+  exts = ".docx",
+  multi = false,
   onSelectFile,
+  onSelectFiles,
 }: Props) {
   const [current, setCurrent] = useState<ExploreResult | null>(null);
   const [drivesList, setDrivesList] = useState<string[]>([]);
   const [special, setSpecial] = useState<SpecialFolder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const load = useCallback(async (dir: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      setCurrent(await explore(dir));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (dir: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        setCurrent(await explore(dir, exts));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [exts],
+  );
 
   // 加载可用盘符与常见用户目录（桌面/文档…）
   useEffect(() => {
@@ -82,6 +96,18 @@ export default function DirectoryPicker({
 
   const enter = (name: string) => {
     if (current) load(`${current.dir}/${name}`);
+  };
+
+  const toggle = (path: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
   };
 
   return (
@@ -190,18 +216,42 @@ export default function DirectoryPicker({
               </div>
               <div className="p-2">
                 <p className="px-2 pb-1 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
-                  本目录 .docx {onSelectFile ? "（点击选择）" : "（预览）"}
+                  文件 {multi ? "（多选）" : onSelectFile ? "（点击选择）" : "（预览）"}
                 </p>
                 {current.files.length === 0 ? (
-                  <p className="px-2 py-1.5 text-xs text-muted-foreground">（无 .docx）</p>
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">（无匹配文件）</p>
                 ) : (
                   <ul>
-                    {current.files.map((f) =>
-                      onSelectFile ? (
+                    {current.files.map((f) => {
+                      const path = `${current.dir}/${f}`;
+                      if (multi) {
+                        const checked = selected.has(path);
+                        return (
+                          <li key={f}>
+                            <div
+                              onClick={() => toggle(path)}
+                              className={cn(
+                                "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm select-none transition-colors",
+                                checked ? "bg-accent/70" : "hover:bg-accent",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                readOnly
+                                className="pointer-events-none size-4 shrink-0 accent-primary"
+                              />
+                              <FileText className="size-4 shrink-0 text-muted-foreground" />
+                              <span className="truncate">{f}</span>
+                            </div>
+                          </li>
+                        );
+                      }
+                      return onSelectFile ? (
                         <li key={f}>
                           <button
                             type="button"
-                            onClick={() => onSelectFile(`${current.dir}/${f}`)}
+                            onClick={() => onSelectFile(path)}
                             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
                           >
                             <FileText className="size-4 shrink-0 text-muted-foreground" />
@@ -216,8 +266,8 @@ export default function DirectoryPicker({
                           <FileText className="size-4 shrink-0" />
                           <span className="truncate">{f}</span>
                         </li>
-                      ),
-                    )}
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -227,14 +277,33 @@ export default function DirectoryPicker({
           )}
         </ScrollArea>
 
+        {multi && selected.size > 0 && (
+          <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-1.5 text-xs">
+            <span className="text-muted-foreground">已选 {selected.size} 个文件</span>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="font-medium text-destructive hover:underline"
+            >
+              清除
+            </button>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             取消
           </Button>
-          {!onSelectFile && (
-            <Button disabled={!current} onClick={() => current && onSelect(current.dir)}>
-              选择此目录
+          {multi ? (
+            <Button disabled={selected.size === 0} onClick={() => onSelectFiles?.([...selected])}>
+              确认选择 ({selected.size})
             </Button>
+          ) : (
+            !onSelectFile && (
+              <Button disabled={!current} onClick={() => current && onSelect(current.dir)}>
+                选择此目录
+              </Button>
+            )
           )}
         </DialogFooter>
       </DialogContent>

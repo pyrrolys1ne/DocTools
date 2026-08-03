@@ -10,9 +10,8 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 
-from doctools.batch import FileResult, build_plan, process_batch
+from doctools.batch import FileResult, run_operation
 
 
 @dataclass
@@ -37,18 +36,33 @@ class JobManager:
 
     def create(
         self,
-        source_path: str,
+        operation: str = "remove-headers",
+        source_path: str = "",
         output_path: str = "",
         recursive: bool = False,
         dry_run: bool = False,
         output_is_dir: bool = False,
+        sources: list[str] | None = None,
+        page_ranges: str = "",
+        merge_images: bool = False,
     ) -> Job:
         job = Job(id=uuid.uuid4().hex[:8])
         with self._lock:
             self._jobs[job.id] = job
         thread = threading.Thread(
             target=self._run,
-            args=(job, source_path, output_path, recursive, dry_run, output_is_dir),
+            args=(
+                job,
+                operation,
+                source_path,
+                output_path,
+                recursive,
+                dry_run,
+                output_is_dir,
+                sources,
+                page_ranges,
+                merge_images,
+            ),
             daemon=True,
         )
         thread.start()
@@ -57,39 +71,45 @@ class JobManager:
     def _run(
         self,
         job: Job,
+        operation: str,
         source_path: str,
         output_path: str,
         recursive: bool,
         dry_run: bool,
         output_is_dir: bool,
+        sources: list[str] | None,
+        page_ranges: str,
+        merge_images: bool,
     ) -> None:
-        try:
-            plan = build_plan(
-                Path(source_path),
-                Path(output_path) if output_path else None,
-                recursive,
-                output_is_dir,
-            )
-        except Exception as exc:  # noqa: BLE001 - 边界错误统一上报给前端
-            job.status = "failed"
-            job.error = str(exc)
-            return
-
-        job.total = len(plan)
         job.status = "running"
 
-        if dry_run:
-            job.results = [FileResult(src=s, dst=d, ok=True) for s, d in plan]
-            job.done = job.total
-            job.status = "done"
-            return
-
-        def on_progress(_total: int, done: int, result: FileResult) -> None:
+        def on_progress(total: int, done: int, result: FileResult) -> None:
+            job.total = total
             job.done = done
             job.current = str(result.src)
             job.results.append(result)
 
-        process_batch(plan, on_progress=on_progress)
+        try:
+            results = run_operation(
+                operation,
+                source_path=source_path,
+                output_path=output_path,
+                recursive=recursive,
+                dry_run=dry_run,
+                output_is_dir=output_is_dir,
+                sources=sources,
+                page_ranges=page_ranges,
+                merge_images=merge_images,
+                on_progress=on_progress,
+            )
+        except Exception as exc:  # noqa: BLE001 - 参数校验/引擎缺失等统一上报
+            job.status = "failed"
+            job.error = str(exc)
+            return
+
+        job.results = results
+        job.total = len(results)
+        job.done = len(results)
         job.status = "done"
 
     def get(self, job_id: str) -> Job | None:

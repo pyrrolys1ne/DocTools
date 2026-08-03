@@ -31,12 +31,19 @@ class ScanRequest(BaseModel):
 
 
 class JobRequest(BaseModel):
-    source_path: str
+    operation: str = "remove-headers"
+    source_path: str = ""
     output_path: str = ""
     recursive: bool = False
     dry_run: bool = False
     # 单文件模式下，output_path 视为目录而非完整文件路径
     output_is_dir: bool = False
+    # 合并 PDF：多选源文件（按顺序合并）
+    sources: list[str] = []
+    # 拆分 PDF：自定义页码范围（如 "1-3,5,8-12"；留空则每页一个）
+    page_ranges: str = ""
+    # 图片转 PDF：为 True 时把所有图片合并成一个 PDF，否则每张一个
+    merge_images: bool = False
 
 
 def _require_dir(path: str) -> Path:
@@ -95,12 +102,14 @@ def drives() -> dict:
 
 
 @app.get("/api/explore")
-def explore(dir: str = ".") -> dict:
-    """列出目录下的子目录与 .docx 文件，供前端文件夹浏览。
+def explore(dir: str = ".", exts: str = ".docx") -> dict:
+    """列出目录下的子目录与匹配扩展名的文件，供前端文件夹浏览。
 
     对权限受限的系统目录（如 $RECYCLE.BIN 的子层）做容错：读不到的
     条目跳过、整个目录不可读时返回 ``error`` 提示，而不是 500 中断浏览。
+    ``exts`` 为逗号分隔的后缀（默认 ``.docx``），如 ``.pdf`` 或 ``.docx,.pptx``。
     """
+    suffix_set = {s.strip().lower() for s in exts.split(",") if s.strip()}
     p = _require_dir(dir).resolve()
     dirs: list[str] = []
     files: list[str] = []
@@ -110,7 +119,7 @@ def explore(dir: str = ".") -> dict:
             try:
                 if entry.is_dir():
                     dirs.append(entry.name)
-                elif entry.suffix.lower() == ".docx":
+                elif entry.suffix.lower() in suffix_set:
                     files.append(entry.name)
             except OSError:
                 continue  # 单个条目访问失败（权限受限），跳过
@@ -155,11 +164,15 @@ def scan(req: ScanRequest) -> dict:
 @app.post("/api/jobs")
 def create_job(req: JobRequest) -> dict:
     job = jobs.create(
+        operation=req.operation,
         source_path=req.source_path,
         output_path=req.output_path,
         recursive=req.recursive,
         dry_run=req.dry_run,
         output_is_dir=req.output_is_dir,
+        sources=req.sources,
+        page_ranges=req.page_ranges,
+        merge_images=req.merge_images,
     )
     return {"id": job.id}
 
