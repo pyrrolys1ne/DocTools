@@ -7,6 +7,16 @@ export interface ExploreResult {
   error: string | null;
 }
 
+export interface SpecialFolder {
+  name: string;
+  path: string;
+}
+
+export interface DrivesResult {
+  drives: string[];
+  special: SpecialFolder[];
+}
+
 export interface ScanFile {
   name: string;
   size: number;

@@ -116,3 +116,5 @@ ruff check src tests web      # 代码检查
 ## 许可
 
 [MIT](LICENSE) © 2026 pyrrolys1ne
+
+

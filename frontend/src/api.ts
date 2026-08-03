@@ -1,4 +1,4 @@
-import type { ExploreResult, JobStatus, ScanResult } from "./types";
+import type { DrivesResult, ExploreResult, JobStatus, ScanResult } from "./types";
 
 async function get<T>(path: string): Promise<T> {
   const resp = await fetch(path);
@@ -24,8 +24,8 @@ export function explore(dir: string): Promise<ExploreResult> {
   return get<ExploreResult>(`/api/explore?dir=${encodeURIComponent(dir)}`);
 }
 
-export function drives(): Promise<string[]> {
-  return get<{ drives: string[] }>("/api/drives").then((d) => d.drives);
+export function drives(): Promise<DrivesResult> {
+  return get<DrivesResult>("/api/drives");
 }
 
 export function scan(sourcePath: string, recursive: boolean): Promise<ScanResult> {

@@ -49,9 +49,27 @@ def test_scan_lists_docx_recursively(tmp_path: Path) -> None:
 def test_drives_lists_at_least_one() -> None:
     resp = client.get("/api/drives")
     assert resp.status_code == 200
-    drives = resp.json()["drives"]
-    assert isinstance(drives, list)
-    assert len(drives) >= 1
+    data = resp.json()
+    assert isinstance(data["drives"], list)
+    assert len(data["drives"]) >= 1
+    assert isinstance(data["special"], list)
+
+
+def test_drives_include_special_folders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """常见用户目录（桌面/文档…）应解析为可访问的物理路径。"""
+    (tmp_path / "Desktop").mkdir()
+    (tmp_path / "Documents").mkdir()
+    monkeypatch.setattr("web.app.Path.home", staticmethod(lambda: tmp_path))
+
+    resp = client.get("/api/drives")
+
+    assert resp.status_code == 200
+    special = resp.json()["special"]
+    assert {"name": "桌面", "path": str(tmp_path / "Desktop")} in special
+    assert {"name": "文档", "path": str(tmp_path / "Documents")} in special
+    assert "视频" not in {s["name"] for s in special}  # 未创建的目录不列出
 
 
 def test_explore_returns_parent_and_dirs(tmp_path: Path) -> None:

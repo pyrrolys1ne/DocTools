@@ -64,15 +64,34 @@ def _job_dict(job_id: str) -> dict:
     }
 
 
+def _special_folders() -> list[dict[str, str]]:
+    """列出常见用户目录（桌面/文档/下载/图片/音乐/视频）的物理路径。
+
+    Windows 各语言版本的物理目录名均为英文（本地化只影响资源管理器里
+    的显示名），因此用 ``Path.home()`` 拼接即可得到真实可访问路径。
+    """
+    home = Path.home()
+    result: list[dict[str, str]] = []
+    for label, name in (
+        ("桌面", "Desktop"),
+        ("文档", "Documents"),
+        ("下载", "Downloads"),
+    ):
+        p = home / name
+        if p.is_dir():
+            result.append({"name": label, "path": str(p)})
+    return result
+
+
 @app.get("/api/drives")
 def drives() -> dict:
-    """列出可用的盘符（Windows 的 C: D: …），非 Windows 返回根目录 /。"""
+    """列出可用的盘符（Windows 的 C: D: …）与常见用户目录（桌面/文档…）。"""
     if os.name != "nt":
-        return {"drives": ["/"]}
+        return {"drives": ["/"], "special": []}
     found = [
         f"{letter}:" for letter in string.ascii_uppercase if os.path.exists(f"{letter}:\\")
     ]
-    return {"drives": found}
+    return {"drives": found, "special": _special_folders()}
 
 
 @app.get("/api/explore")
