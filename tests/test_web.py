@@ -416,6 +416,100 @@ def test_job_ppt_to_pdf(tmp_path: Path) -> None:
     assert (out / "a.pdf").exists()
 
 
+def _make_text_pdf(path: Path, pages: int = 1) -> None:
+    from reportlab.pdfgen import canvas  # noqa: PLC0415
+
+    c = canvas.Canvas(str(path))
+    for i in range(1, pages + 1):
+        c.drawString(72, 720, f"test {i}")
+        c.showPage()
+    c.save()
+
+
+def test_job_pdf_to_word(tmp_path: Path) -> None:
+    _make_text_pdf(tmp_path / "a.pdf")
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "pdf-to-word",
+            "source_path": str(tmp_path / "a.pdf"),
+            "output_path": str(out),
+            "output_is_dir": True,
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id, timeout=60)
+    assert data["status"] == "done"
+    assert (out / "a.docx").exists()
+
+
+def test_job_pdf_to_ppt(tmp_path: Path) -> None:
+    _make_text_pdf(tmp_path / "a.pdf", pages=2)
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "pdf-to-ppt",
+            "source_path": str(tmp_path / "a.pdf"),
+            "output_path": str(out),
+            "output_is_dir": True,
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id, timeout=60)
+    assert data["status"] == "done"
+    assert (out / "a.pptx").exists()
+
+
+def test_job_compress_images(tmp_path: Path) -> None:
+    _make_img(tmp_path / "a.png")
+    _make_img(tmp_path / "b.png")
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "compress-images",
+            "source_path": str(tmp_path),
+            "output_path": str(out),
+            "quality": 60,
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id)
+    assert data["status"] == "done"
+    assert data["total"] == 2
+    assert (out / "a.png").exists()
+    assert (out / "b.png").exists()
+
+
+def test_job_pdf_to_images(tmp_path: Path) -> None:
+    _make_text_pdf(tmp_path / "a.pdf", pages=2)
+    out = tmp_path / "out"
+
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "operation": "pdf-to-images",
+            "source_path": str(tmp_path / "a.pdf"),
+            "output_path": str(out),
+        },
+    )
+    job_id = resp.json()["id"]
+
+    data = _wait_done(job_id, timeout=60)
+    assert data["status"] == "done"
+    assert data["total"] == 2
+    assert (out / "a_p1.png").exists()
+    assert (out / "a_p2.png").exists()
+
+
 def _make_img(path: Path) -> None:
     from PIL import Image  # noqa: PLC0415
 

@@ -6,7 +6,13 @@ from typer.testing import CliRunner
 
 from doctools.batch import build_plan
 from doctools.cli import app
-from doctools.docx import clear_headers, strip_headers
+from doctools.docx import (
+    clear_footers,
+    clear_headers,
+    strip_footers,
+    strip_headers,
+    strip_headers_footers,
+)
 
 runner = CliRunner()
 
@@ -211,3 +217,135 @@ def test_cli_remove_headers_non_recursive_skips_subdirs(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.stdout
     assert (tmp_path / "out" / "a.docx").exists()
     assert not (tmp_path / "out" / "sub" / "b.docx").exists()
+
+
+# ===== 去页脚 =====
+
+
+def _doc_with_footers() -> Document:
+    doc = Document()
+    f1 = doc.sections[0].footer
+    f1.is_linked_to_previous = False
+    f1.paragraphs[0].text = "页脚第一行"
+    f1.add_paragraph("第二行页脚")
+    doc.add_paragraph("正文第一段")
+    return doc
+
+
+def test_clear_footers_removes_all_footer_text() -> None:
+    doc = _doc_with_footers()
+    clear_footers(doc)
+    for section in doc.sections:
+        assert all(p.text == "" for p in section.footer.paragraphs)
+        assert all(p.text == "" for p in section.first_page_footer.paragraphs)
+        assert all(p.text == "" for p in section.even_page_footer.paragraphs)
+
+
+def test_clear_footers_keeps_body_text() -> None:
+    doc = _doc_with_footers()
+    clear_footers(doc)
+    assert "正文第一段" in [p.text for p in doc.paragraphs]
+
+
+def test_clear_footers_removes_paragraph_border() -> None:
+    """页脚段落的上边框（w:pBdr）是段落格式，去页脚时应一并移除。"""
+    doc = _doc_with_footers()
+    footer = doc.sections[0].footer
+    footer.is_linked_to_previous = False
+    pPr = footer.paragraphs[0]._p.get_or_add_pPr()
+    pBdr = pPr.makeelement(qn("w:pBdr"), {})
+    top = pPr.makeelement(qn("w:top"), {qn("w:val"): "single", qn("w:sz"): "4"})
+    pBdr.append(top)
+    pPr.append(pBdr)
+
+    clear_footers(doc)
+
+    for section in doc.sections:
+        for footer in (section.footer, section.first_page_footer, section.even_page_footer):
+            for paragraph in footer.paragraphs:
+                _pPr = paragraph._p.find(qn("w:pPr"))
+                assert _pPr is None or _pPr.find(qn("w:pBdr")) is None
+
+
+def _footer_style_with_border(doc: Document) -> None:
+    """给文档的 Footer 段落样式注入上边框（Word 页脚横线的来源）。"""
+    for style in doc.styles.element.findall(qn("w:style")):
+        if style.get(qn("w:styleId")) != "Footer":
+            continue
+        pPr = style.get_or_add_pPr()
+        pBdr = pPr.makeelement(qn("w:pBdr"), {})
+        top = pPr.makeelement(qn("w:top"), {qn("w:val"): "single", qn("w:sz"): "6"})
+        pBdr.append(top)
+        pPr.insert(0, pBdr)
+        return
+
+
+def test_clear_footers_removes_footer_style_border() -> None:
+    """Word 页脚横线常来自 Footer 样式的 w:pBdr，需从样式定义中一并移除。"""
+    doc = _doc_with_footers()
+    _footer_style_with_border(doc)
+
+    clear_footers(doc)
+
+    for style in doc.styles.element.findall(qn("w:style")):
+        if style.get(qn("w:styleId")) != "Footer":
+            continue
+        pPr = style.find(qn("w:pPr"))
+        assert pPr is None or pPr.find(qn("w:pBdr")) is None
+
+
+def test_strip_footers_file(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    dst = tmp_path / "out.docx"
+    _doc_with_footers().save(str(src))
+
+    strip_footers(src, dst)
+
+    out = Document(str(dst))
+    assert all(p.text == "" for s in out.sections for p in s.footer.paragraphs)
+    assert any(p.text.startswith("正文") for p in out.paragraphs)
+
+
+def test_cli_remove_footers_single_file(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    dst = tmp_path / "out.docx"
+    _doc_with_footers().save(str(src))
+
+    result = runner.invoke(app, ["remove-footers", str(src), "--output", str(dst)])
+
+    assert result.exit_code == 0, result.stdout
+    out = Document(str(dst))
+    assert all(p.text == "" for s in out.sections for p in s.footer.paragraphs)
+
+
+def _doc_with_headers_and_footers() -> Document:
+    doc = _doc_with_headers()
+    f = doc.sections[0].footer
+    f.is_linked_to_previous = False
+    f.paragraphs[0].text = "页脚内容"
+    return doc
+
+
+def test_strip_headers_footers_removes_both(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    dst = tmp_path / "out.docx"
+    _doc_with_headers_and_footers().save(str(src))
+
+    strip_headers_footers(src, dst)
+
+    out = Document(str(dst))
+    assert all(p.text == "" for s in out.sections for p in s.header.paragraphs)
+    assert all(p.text == "" for s in out.sections for p in s.footer.paragraphs)
+
+
+def test_cli_remove_headers_footers(tmp_path: Path) -> None:
+    src = tmp_path / "in.docx"
+    dst = tmp_path / "out.docx"
+    _doc_with_headers_and_footers().save(str(src))
+
+    result = runner.invoke(app, ["remove-headers-footers", str(src), "--output", str(dst)])
+
+    assert result.exit_code == 0, result.stdout
+    out = Document(str(dst))
+    assert all(p.text == "" for s in out.sections for p in s.header.paragraphs)
+    assert all(p.text == "" for s in out.sections for p in s.footer.paragraphs)

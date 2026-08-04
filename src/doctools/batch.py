@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
-from doctools.docx import strip_headers
+from doctools.docx import strip_footers, strip_headers, strip_headers_footers
 from doctools.model import FileResult, ProgressFn  # noqa: F401  # 从 batch 重新导出
 
 # 各类转换支持的输入后缀
@@ -29,10 +29,16 @@ FORMAT_SUFFIXES = {
 
 OPERATIONS = {
     "remove-headers",
+    "remove-footers",
+    "remove-headers-footers",
     "to-pdf",
     "word-to-pdf",
     "ppt-to-pdf",
     "image-to-pdf",
+    "pdf-to-word",
+    "pdf-to-ppt",
+    "pdf-to-images",
+    "compress-images",
     "merge-pdf",
     "split-pdf",
 }
@@ -113,14 +119,38 @@ def build_convert_plan(
     recursive: bool = False,
     output_is_dir: bool = False,
     suffixes: tuple[str, ...] = CONVERT_SUFFIXES,
+    out_suffix: str = ".pdf",
+    default_out_dir: str = "pdf",
 ) -> list[tuple[Path, Path]]:
-    """转 PDF 的处理计划：指定后缀的文件 → ``{stem}.pdf``。"""
+    """转换的处理计划：指定后缀的文件 → ``{stem}{out_suffix}``。"""
     return _build_plan(
         src, dst, recursive, output_is_dir,
         suffixes,
-        dir_out_name=lambda s: f"{s.stem}.pdf",
-        file_out_name=lambda s: f"{s.stem}.pdf",
-        default_out_dir="pdf",
+        dir_out_name=lambda s: f"{s.stem}{out_suffix}",
+        file_out_name=lambda s: f"{s.stem}{out_suffix}",
+        default_out_dir=default_out_dir,
+    )
+
+
+def _compress_name(s: Path) -> str:
+    """压缩后的输出文件名：JPEG → ``{stem}.jpg``，其余 → ``{stem}.png``。"""
+    ext = ".jpg" if s.suffix.lower() in (".jpg", ".jpeg") else ".png"
+    return f"{s.stem}{ext}"
+
+
+def build_compress_plan(
+    src: Path,
+    dst: Path | None = None,
+    recursive: bool = False,
+    output_is_dir: bool = False,
+) -> list[tuple[Path, Path]]:
+    """图片压缩的处理计划：图片 → ``{stem}.jpg`` / ``{stem}.png``。"""
+    return _build_plan(
+        src, dst, recursive, output_is_dir,
+        IMAGE_SUFFIXES,
+        dir_out_name=_compress_name,
+        file_out_name=_compress_name,
+        default_out_dir="compressed",
     )
 
 
@@ -162,6 +192,7 @@ def run_operation(
     sources: list[str] | None = None,
     page_ranges: str = "",
     merge_images: bool = False,
+    quality: int = 80,
     on_progress: ProgressFn | None = None,
 ) -> list[FileResult]:
     """按操作名执行并返回逐文件结果。参数校验失败抛 ``ValueError``。"""
@@ -172,11 +203,16 @@ def run_operation(
     dst = Path(output_path) if output_path else None
     srcs = [Path(p) for p in (sources or [])]
 
-    if operation == "remove-headers":
+    if operation in ("remove-headers", "remove-footers", "remove-headers-footers"):
         plan = build_plan(src, dst, recursive, output_is_dir)
         if dry_run:
             return [FileResult(s, d, ok=True) for s, d in plan]
-        return process_batch(plan, on_progress=on_progress)
+        worker = {
+            "remove-headers": strip_headers,
+            "remove-footers": strip_footers,
+            "remove-headers-footers": strip_headers_footers,
+        }[operation]
+        return process_batch(plan, on_progress=on_progress, worker=worker)
 
     if operation in ("to-pdf", "word-to-pdf", "ppt-to-pdf"):
         suffixes = FORMAT_SUFFIXES[operation]
@@ -187,6 +223,38 @@ def run_operation(
 
         with OfficeConverter() as converter:
             return process_batch(plan, on_progress=on_progress, worker=converter.convert)
+
+    if operation in ("pdf-to-word", "pdf-to-ppt"):
+        plan = build_convert_plan(
+            src, dst, recursive, output_is_dir,
+            suffixes=(".pdf",),
+            out_suffix=".docx" if operation == "pdf-to-word" else ".pptx",
+            default_out_dir="docx" if operation == "pdf-to-word" else "pptx",
+        )
+        if dry_run:
+            return [FileResult(s, d, ok=True) for s, d in plan]
+        from doctools.pdf_convert import pdf_to_docx, pdf_to_pptx  # 惰性
+
+        worker = pdf_to_docx if operation == "pdf-to-word" else pdf_to_pptx
+        return process_batch(plan, on_progress=on_progress, worker=worker)
+
+    if operation == "pdf-to-images":
+        if not src.is_file() or src.suffix.lower() != ".pdf":
+            raise ValueError(f"PDF 转图片的源必须是单个 .pdf 文件：{source_path}")
+        out_dir = dst if dst is not None else src.with_name(f"{src.stem}_images")
+        from doctools.pdf_convert import pdf_to_images  # 惰性
+
+        if dry_run:
+            import fitz  # noqa: PLC0415  # PyMuPDF
+
+            doc = fitz.open(str(src))
+            page_count = len(doc)
+            doc.close()
+            return [
+                FileResult(src, out_dir / f"{src.stem}_p{i}.png", ok=True)
+                for i in range(1, page_count + 1)
+            ]
+        return pdf_to_images(src, out_dir, on_progress)
 
     if operation == "image-to-pdf":
         from doctools.images import merge_images_to_pdf
@@ -200,6 +268,15 @@ def run_operation(
         if dry_run:
             return [FileResult(s, target, ok=True) for s in images]
         return merge_images_to_pdf(images, target, on_progress)
+
+    if operation == "compress-images":
+        plan = build_compress_plan(src, dst, recursive, output_is_dir)
+        if dry_run:
+            return [FileResult(s, d, ok=True) for s, d in plan]
+        from doctools.images import compress_image  # 惰性
+
+        worker = lambda s, d: compress_image(s, d, quality)  # noqa: E731
+        return process_batch(plan, on_progress=on_progress, worker=worker)
 
     if operation == "merge-pdf":
         if not srcs:

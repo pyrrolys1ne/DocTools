@@ -26,14 +26,29 @@ export interface FileResult {
 
 export type Operation =
   | "remove-headers"
+  | "remove-footers"
+  | "remove-headers-footers"
   | "word-to-pdf"
   | "ppt-to-pdf"
   | "image-to-pdf"
+  | "pdf-to-word"
+  | "pdf-to-ppt"
+  | "pdf-to-images"
+  | "compress-images"
   | "merge-pdf"
   | "split-pdf";
 
-/** 使用批量表单（源目录/单文件 + 递归 + dry-run）的操作。 */
-export type BatchOp = "remove-headers" | "word-to-pdf" | "ppt-to-pdf" | "image-to-pdf";
+/** 使用批量表单（源目录/单文件 + 递归）的操作。 */
+export type BatchOp =
+  | "remove-headers"
+  | "remove-footers"
+  | "remove-headers-footers"
+  | "word-to-pdf"
+  | "ppt-to-pdf"
+  | "image-to-pdf"
+  | "pdf-to-word"
+  | "pdf-to-ppt"
+  | "compress-images";
 
 export interface CreateJobParams {
   operation: Operation;
@@ -43,6 +58,8 @@ export interface CreateJobParams {
   output_is_dir: boolean;
   sources?: string[];
   page_ranges?: string;
+  /** 图片压缩：JPEG 重编码质量（1-100）。 */
+  quality?: number;
 }
 
 export type JobState = "pending" | "running" | "done" | "failed";

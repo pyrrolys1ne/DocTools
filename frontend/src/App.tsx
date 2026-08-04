@@ -4,11 +4,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Eraser,
+  FileImage,
   FileText,
   Files,
   Image as ImageIcon,
   Loader2,
   Presentation,
+  Shrink,
   Split,
   XCircle,
   type LucideIcon,
@@ -49,29 +51,75 @@ type PickerTarget =
   | { kind: "merge-source" }
   | { kind: "merge-output" }
   | { kind: "split-source" }
-  | { kind: "split-output" };
+  | { kind: "split-output" }
+  | { kind: "pdf-images-source" }
+  | { kind: "pdf-images-output" };
+
+/** 去页眉版块的可选目标：去页眉 / 去页脚 / 两者同时。 */
+type RemoveTarget = "remove-headers" | "remove-footers" | "remove-headers-footers";
+
+const REMOVE_TARGETS: RemoveTarget[] = [
+  "remove-headers",
+  "remove-footers",
+  "remove-headers-footers",
+];
+
+const TARGET_LABEL: Record<RemoveTarget, string> = {
+  "remove-headers": "去页眉",
+  "remove-footers": "去页脚",
+  "remove-headers-footers": "去页眉页脚",
+};
 
 const BATCH_EXTS: Record<BatchOp, string> = {
   "remove-headers": ".docx",
+  "remove-footers": ".docx",
+  "remove-headers-footers": ".docx",
   "word-to-pdf": ".docx,.doc",
   "ppt-to-pdf": ".pptx,.ppt",
   "image-to-pdf": ".png,.jpg,.jpeg,.bmp,.gif,.webp,.tif,.tiff",
+  "pdf-to-word": ".pdf",
+  "pdf-to-ppt": ".pdf",
+  "compress-images": ".png,.jpg,.jpeg,.bmp,.gif,.webp,.tif,.tiff",
+};
+
+const HEADER_FOOTER_PLACEHOLDER = {
+  dir: "选择包含 .docx 的目录",
+  file: "选择或拖入 .docx 文件",
+};
+
+const PDF_PLACEHOLDER = {
+  dir: "选择包含 .pdf 的目录",
+  file: "选择或拖入 .pdf 文件",
+};
+
+const IMAGE_PLACEHOLDER = {
+  dir: "选择包含图片（png/jpg/…）的目录",
+  file: "选择或拖入图片（png/jpg/…）",
 };
 
 /** 各批量操作的源路径占位说明（行内显示在输入框内）。 */
 const SOURCE_PLACEHOLDER: Record<BatchOp, { dir: string; file: string }> = {
-  "remove-headers": { dir: "选择包含 .docx 的目录", file: "选择或拖入 .docx 文件" },
+  "remove-headers": HEADER_FOOTER_PLACEHOLDER,
+  "remove-footers": HEADER_FOOTER_PLACEHOLDER,
+  "remove-headers-footers": HEADER_FOOTER_PLACEHOLDER,
   "word-to-pdf": { dir: "选择包含 .docx/.doc 的目录", file: "选择或拖入 .docx/.doc 文件" },
   "ppt-to-pdf": { dir: "选择包含 .pptx/.ppt 的目录", file: "选择或拖入 .pptx/.ppt 文件" },
-  "image-to-pdf": { dir: "选择包含图片（png/jpg/…）的目录", file: "选择或拖入图片（png/jpg/…）" },
+  "image-to-pdf": IMAGE_PLACEHOLDER,
+  "pdf-to-word": PDF_PLACEHOLDER,
+  "pdf-to-ppt": PDF_PLACEHOLDER,
+  "compress-images": IMAGE_PLACEHOLDER,
+};
+
+const HEADER_FOOTER_OUTPUT = {
+  dir: "默认生成到源目录旁的 *_cleaned 文件夹",
+  file: "默认生成到源文件旁的 *_cleaned.docx",
 };
 
 /** 各批量操作的输出目录占位说明（标注默认生成的位置）。 */
 const OUTPUT_PLACEHOLDER: Record<BatchOp, { dir: string; file: string }> = {
-  "remove-headers": {
-    dir: "默认生成到源目录旁的 *_cleaned 文件夹",
-    file: "默认生成到源文件旁的 *_cleaned.docx",
-  },
+  "remove-headers": HEADER_FOOTER_OUTPUT,
+  "remove-footers": HEADER_FOOTER_OUTPUT,
+  "remove-headers-footers": HEADER_FOOTER_OUTPUT,
   "word-to-pdf": {
     dir: "默认生成到源目录旁的 *_pdf 文件夹",
     file: "默认生成到源文件旁的同名 .pdf",
@@ -84,9 +132,22 @@ const OUTPUT_PLACEHOLDER: Record<BatchOp, { dir: string; file: string }> = {
     dir: "默认生成到源目录旁 *_images 文件夹的 merged.pdf",
     file: "默认生成到源文件旁 *_images 文件夹的 merged.pdf",
   },
+  "pdf-to-word": {
+    dir: "默认生成到源目录旁的 *_docx 文件夹",
+    file: "默认生成到源文件旁的同名 .docx",
+  },
+  "pdf-to-ppt": {
+    dir: "默认生成到源目录旁的 *_pptx 文件夹",
+    file: "默认生成到源文件旁的同名 .pptx",
+  },
+  "compress-images": {
+    dir: "默认生成到源目录旁的 *_compressed 文件夹",
+    file: "默认生成到源文件旁的同名文件",
+  },
 };
 
 /** 首页功能宫格：每个功能一个小方块，点开进入对应页面。 */
+/** 首页功能宫格：六项转换置顶成对排列，其余功能紧随，大小一致。 */
 const OPERATIONS_META: {
   op: Operation;
   title: string;
@@ -94,12 +155,23 @@ const OPERATIONS_META: {
   icon: LucideIcon;
   accent: string;
 }[] = [
-  { op: "remove-headers", title: "去页眉", desc: "批量移除 Word 页眉", icon: Eraser, accent: "from-blue-500 to-indigo-500" },
   { op: "word-to-pdf", title: "Word 转 PDF", desc: ".docx/.doc 转为 PDF", icon: FileText, accent: "from-sky-500 to-blue-600" },
+  { op: "pdf-to-word", title: "PDF 转 Word", desc: "PDF 转为可编辑的 Word", icon: FileText, accent: "from-cyan-500 to-teal-500" },
   { op: "ppt-to-pdf", title: "PPT 转 PDF", desc: ".pptx/.ppt 转为 PDF", icon: Presentation, accent: "from-orange-500 to-amber-500" },
+  { op: "pdf-to-ppt", title: "PDF 转 PPT", desc: "PDF 每页做成一张幻灯片", icon: Presentation, accent: "from-fuchsia-500 to-purple-500" },
   { op: "image-to-pdf", title: "图片转 PDF", desc: "多张图片合成一个 PDF", icon: ImageIcon, accent: "from-emerald-500 to-teal-500" },
+  { op: "pdf-to-images", title: "PDF 转图片", desc: "PDF 每页导出一张 PNG", icon: FileImage, accent: "from-teal-500 to-cyan-600" },
   { op: "merge-pdf", title: "合并 PDF", desc: "把多个 PDF 合成一个", icon: Files, accent: "from-violet-500 to-purple-500" },
   { op: "split-pdf", title: "拆分 PDF", desc: "每页一个或按页码范围", icon: Split, accent: "from-rose-500 to-pink-500" },
+  { op: "remove-headers", title: "去页眉 / 去页脚", desc: "移除 Word 页眉、页脚", icon: Eraser, accent: "from-blue-500 to-indigo-500" },
+  { op: "compress-images", title: "图片压缩", desc: "压缩图片体积，可选质量", icon: Shrink, accent: "from-amber-500 to-orange-600" },
+];
+
+/** 图片压缩质量档位。 */
+const QUALITY_LEVELS = [
+  { label: "高", value: 90 },
+  { label: "中", value: 80 },
+  { label: "低", value: 60 },
 ];
 
 function Field({
@@ -147,6 +219,8 @@ interface BatchFormProps {
   dragOver: boolean;
   onDragOver: (v: boolean) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  quality: number;
+  onQualityChange: (q: number) => void;
   onStart: () => void;
   busy: boolean;
   onBrowseSource: () => void;
@@ -167,6 +241,8 @@ function BatchForm(props: BatchFormProps) {
     dragOver,
     onDragOver,
     onDrop,
+    quality,
+    onQualityChange,
     onStart,
     busy,
     onBrowseSource,
@@ -242,6 +318,29 @@ function BatchForm(props: BatchFormProps) {
           )}
         </div>
 
+        {op === "compress-images" && (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">压缩质量</span>
+            <div className="inline-flex rounded-lg bg-muted p-[3px]">
+              {QUALITY_LEVELS.map((lv) => (
+                <button
+                  key={lv.value}
+                  type="button"
+                  onClick={() => onQualityChange(lv.value)}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-sm transition-colors",
+                    quality === lv.value
+                      ? "bg-background font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {lv.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 pt-1">
           <Button onClick={onStart} disabled={busy}>
             开始处理
@@ -254,12 +353,15 @@ function BatchForm(props: BatchFormProps) {
 
 export default function App() {
   const [view, setView] = useState<View>("home");
-  // 批量表单（去页眉 / 各转PDF 共用）
+  // 去页眉 / 去页脚 / 两者（同一版块，子切换）
+  const [target, setTarget] = useState<RemoveTarget>("remove-headers");
+  // 批量表单（去页眉/去页脚 / 各转PDF 共用）
   const [scope, setScope] = useState<Scope>("dir");
   const [source, setSource] = useState("");
   const [output, setOutput] = useState("");
   const [recursive, setRecursive] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [compressQuality, setCompressQuality] = useState(80);
   // 合并 PDF
   const [mergeSources, setMergeSources] = useState<string[]>([]);
   const [mergeOutDir, setMergeOutDir] = useState("");
@@ -269,6 +371,9 @@ export default function App() {
   const [splitOutDir, setSplitOutDir] = useState("");
   const [splitCustom, setSplitCustom] = useState(false);
   const [splitRanges, setSplitRanges] = useState("");
+  // PDF 转图片
+  const [pdfImagesSource, setPdfImagesSource] = useState("");
+  const [pdfImagesOutDir, setPdfImagesOutDir] = useState("");
   // 运行状态
   const [phase, setPhase] = useState<Phase>("idle");
   const [job, setJob] = useState<JobStatus | null>(null);
@@ -292,7 +397,7 @@ export default function App() {
     [updateRecents],
   );
 
-  // 进入某个功能页时回填该功能上次使用的路径
+  // 进入某个功能页时回填该功能上次使用的路径（去页眉/去页脚按 target 区分记忆）
   useEffect(() => {
     if (view === "home") return;
     if (view === "merge-pdf") {
@@ -300,20 +405,31 @@ export default function App() {
       setMergeFileName(recents.mergeFileName ?? "merged.pdf");
     } else if (view === "split-pdf") {
       setSplitOutDir(recents.output?.["split-pdf"] ?? "");
+    } else if (view === "pdf-to-images") {
+      setPdfImagesSource(recents.source?.["pdf-to-images"] ?? "");
+      setPdfImagesOutDir(recents.output?.["pdf-to-images"] ?? "");
     } else {
-      setSource(recents.source?.[view] ?? "");
-      setOutput(recents.output?.[view] ?? "");
+      const key = view === "remove-headers" ? target : view;
+      setSource(recents.source?.[key] ?? "");
+      setOutput(recents.output?.[key] ?? "");
     }
-    // 仅在切换页面时回填一次
+    // 仅在切换页面 / 切换去页眉去页脚时回填
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, target]);
 
-  const isBatchOp =
-    view === "remove-headers" ||
-    view === "word-to-pdf" ||
-    view === "ppt-to-pdf" ||
-    view === "image-to-pdf";
-  const batchOp: BatchOp = isBatchOp ? view : "remove-headers";
+  // 当前页面使用的批量操作：去页眉版块内由 target 决定（去页眉/去页脚）
+  const batchOp: BatchOp =
+    view === "remove-headers"
+      ? target
+      : view === "word-to-pdf" ||
+          view === "ppt-to-pdf" ||
+          view === "image-to-pdf" ||
+          view === "pdf-to-word" ||
+          view === "pdf-to-ppt" ||
+          view === "compress-images"
+        ? view
+        : "remove-headers";
+  const showTargetToggle = view === "remove-headers";
 
   const progress = job && job.total > 0 ? (job.done / job.total) * 100 : 0;
   const busy = phase === "running";
@@ -367,6 +483,7 @@ export default function App() {
       output_path: output,
       recursive,
       output_is_dir: scope === "file",
+      ...(batchOp === "compress-images" ? { quality: compressQuality } : {}),
     });
   };
 
@@ -408,6 +525,22 @@ export default function App() {
       recursive: false,
       output_is_dir: false,
       page_ranges: splitCustom ? splitRanges : "",
+    });
+  };
+
+  const onStartPdfImages = () => {
+    if (!pdfImagesSource.trim()) {
+      setError("请选择要转图片的 .pdf 文件");
+      return;
+    }
+    remember("source", "pdf-to-images", pdfImagesSource);
+    remember("output", "pdf-to-images", pdfImagesOutDir);
+    startJob({
+      operation: "pdf-to-images",
+      source_path: pdfImagesSource,
+      output_path: pdfImagesOutDir,
+      recursive: false,
+      output_is_dir: false,
     });
   };
 
@@ -456,6 +589,13 @@ export default function App() {
       initial = splitSource;
       title = "选择要拆分的 PDF 文件";
       exts = ".pdf";
+    } else if (k === "pdf-images-source") {
+      initial = pdfImagesSource;
+      title = "选择要转图片的 PDF 文件";
+      exts = ".pdf";
+    } else if (k === "pdf-images-output") {
+      initial = pdfImagesOutDir;
+      title = "选择输出目录";
     } else {
       initial = splitOutDir;
       title = "选择输出目录";
@@ -480,11 +620,16 @@ export default function App() {
           } else if (k === "split-output") {
             setSplitOutDir(dir);
             remember("output", "split-pdf", dir);
+          } else if (k === "pdf-images-output") {
+            setPdfImagesOutDir(dir);
+            remember("output", "pdf-to-images", dir);
           }
           setPicker(null);
         }}
         onSelectFile={
-          (k === "batch-source" && scope === "file") || k === "split-source"
+          (k === "batch-source" && scope === "file") ||
+          k === "split-source" ||
+          k === "pdf-images-source"
             ? (path) => {
                 if (k === "batch-source" && scope === "file") {
                   setSource(path);
@@ -492,6 +637,9 @@ export default function App() {
                 } else if (k === "split-source") {
                   setSplitSource(path);
                   remember("source", "split-pdf", path);
+                } else if (k === "pdf-images-source") {
+                  setPdfImagesSource(path);
+                  remember("source", "pdf-to-images", path);
                 }
                 setPicker(null);
               }
@@ -683,10 +831,69 @@ export default function App() {
                 </div>
               </CardContent>
             </Card>
+          ) : view === "pdf-to-images" ? (
+            <Card className="mt-4">
+              <CardContent className="space-y-4 pt-6">
+                <Field label="源文件">
+                  <div className="flex gap-2">
+                    <Input
+                      value={pdfImagesSource}
+                      onChange={(e) => setPdfImagesSource(e.target.value)}
+                      placeholder="选择要转图片的 .pdf 文件"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => setPicker({ kind: "pdf-images-source" })}
+                    >
+                      浏览…
+                    </Button>
+                  </div>
+                </Field>
+                <Field label="输出目录">
+                  <div className="flex gap-2">
+                    <Input
+                      value={pdfImagesOutDir}
+                      onChange={(e) => setPdfImagesOutDir(e.target.value)}
+                      placeholder="默认生成到源文件旁的 *_images 文件夹"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => setPicker({ kind: "pdf-images-output" })}
+                    >
+                      浏览…
+                    </Button>
+                  </div>
+                </Field>
+                <div className="pt-1">
+                  <Button onClick={onStartPdfImages} disabled={busy}>
+                    开始转换
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="mt-4">
+            <div className="mt-4 space-y-4">
+              {showTargetToggle && (
+                <div className="inline-flex rounded-lg bg-muted p-[3px]">
+                  {REMOVE_TARGETS.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTarget(t)}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-sm transition-colors",
+                        target === t
+                          ? "bg-background font-medium shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {TARGET_LABEL[t]}
+                    </button>
+                  ))}
+                </div>
+              )}
               <BatchForm
-                op={view}
+                op={batchOp}
                 scope={scope}
                 onScopeChange={setScope}
                 source={source}
@@ -698,6 +905,8 @@ export default function App() {
                 dragOver={dragOver}
                 onDragOver={setDragOver}
                 onDrop={handleDrop}
+                quality={compressQuality}
+                onQualityChange={setCompressQuality}
                 onStart={onStartBatch}
                 busy={busy}
                 onBrowseSource={() => setPicker({ kind: "batch-source" })}

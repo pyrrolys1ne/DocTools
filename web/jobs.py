@@ -45,6 +45,7 @@ class JobManager:
         sources: list[str] | None = None,
         page_ranges: str = "",
         merge_images: bool = False,
+        quality: int = 80,
     ) -> Job:
         job = Job(id=uuid.uuid4().hex[:8])
         with self._lock:
@@ -62,6 +63,7 @@ class JobManager:
                 sources,
                 page_ranges,
                 merge_images,
+                quality,
             ),
             daemon=True,
         )
@@ -80,6 +82,7 @@ class JobManager:
         sources: list[str] | None,
         page_ranges: str,
         merge_images: bool,
+        quality: int,
     ) -> None:
         job.status = "running"
 
@@ -100,6 +103,7 @@ class JobManager:
                 sources=sources,
                 page_ranges=page_ranges,
                 merge_images=merge_images,
+                quality=quality,
                 on_progress=on_progress,
             )
         except Exception as exc:  # noqa: BLE001 - 参数校验/引擎缺失等统一上报

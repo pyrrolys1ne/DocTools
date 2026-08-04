@@ -44,6 +44,8 @@ class JobRequest(BaseModel):
     page_ranges: str = ""
     # 图片转 PDF：为 True 时把所有图片合并成一个 PDF，否则每张一个
     merge_images: bool = False
+    # 图片压缩：JPEG 重编码质量（1-100）
+    quality: int = 80
 
 
 def _require_dir(path: str) -> Path:
@@ -173,6 +175,7 @@ def create_job(req: JobRequest) -> dict:
         sources=req.sources,
         page_ranges=req.page_ranges,
         merge_images=req.merge_images,
+        quality=req.quality,
     )
     return {"id": job.id}
 

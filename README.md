@@ -6,20 +6,25 @@
 
 ## 当前能力
 
-- ✅ `remove-headers`：批量去除 Word（`.docx`）文档的页眉（含首页 / 奇偶页变体），
-  连同页眉文字下方的**横线**（段落边框 + Header 样式边框）一并移除
+- ✅ `remove-headers` / `remove-footers`：批量去除 Word（`.docx`）文档的页眉/页脚
+  （含首页 / 奇偶页变体），连同文字旁的**横线**（段落边框 + Header/Footer 样式边框）
+  一并移除
   - ✅ 支持**递归**处理子目录（`--recursive`），输出目录镜像源目录结构
   - ✅ 单文件失败不影响整批
 - ✅ `word-to-pdf` / `ppt-to-pdf`：Word（`.docx/.doc`）、PPT（`.pptx/.ppt`）转 PDF
   - 基于本机 **Microsoft Office COM 自动化**（需安装 Office + `pip install "doctools[office]"`）
 - ✅ `image-to-pdf`：图片（png/jpg/bmp/gif/webp/tiff…）转 PDF ——
   目录内所有图片**合成一个** PDF（每张一页）
+- ✅ `pdf-to-word`：PDF → Word（基于 pdf2docx，有损转换，复杂排版/扫描件质量有限）
+- ✅ `pdf-to-ppt`：PDF → PPT（每页渲染成一张图片幻灯片，版式还原、文字不可编辑）
+- ✅ `pdf-to-images`：PDF → 图片（每页导出一张 PNG）
+- ✅ `compress-images`：图片压缩（JPEG 按质量重编码，其余转优化 PNG，可选质量档）
 - ✅ `merge-pdf`：按选择顺序把多个 PDF 合并为一个
 - ✅ `split-pdf`：拆分 PDF —— 每页一个文件，或按自定义页码范围（如 `1-3,5,8-12`）
 - ✅ **本地 Web 界面**：浏览器里浏览/选择目录、实时进度与逐文件结果；
-  支持 **去页眉 / Word 转 PDF / PPT 转 PDF / 图片转 PDF / 合并 PDF / 拆分 PDF**
-  六种操作（FastAPI + React）
-- 🚧 PDF 转 PPT（规划中）
+  支持 **去页眉/去页脚 / Word↔PDF / PPT↔PDF / 图片↔PDF / PDF 转图片 / 图片压缩 /
+  合并 PDF / 拆分 PDF** 操作（FastAPI + React）；首页宫格中六项转换功能置于顶部，
+  互转功能成对排列在同一排
 
 ## 安装
 
@@ -49,10 +54,11 @@ pip install -e ".[office]"    # 转 PDF 需要（Windows + 本机已装 Microsof
 doctools remove-headers 文档.docx -o 文档_clean.docx
 ```
 
-批量去除目录下所有 `.docx` 的页眉：
+批量去除目录下所有 `.docx` 的页眉/页脚：
 
 ```bash
 doctools remove-headers ./docs -o ./docs_cleaned
+doctools remove-footers ./docs -o ./docs_cleaned
 ```
 
 递归处理子目录（输出镜像源目录结构）：
@@ -68,6 +74,15 @@ doctools word-to-pdf 文档.docx -o 输出目录
 doctools ppt-to-pdf ./slides -o ./slides_pdf --recursive
 doctools image-to-pdf ./图片 -o 输出目录   # 目录内所有图片合成一个 PDF
 # 旧的混合命令仍可用：doctools to-pdf ...
+```
+
+PDF 转 Word / PPT / 图片（有损，扫描件需先 OCR）：
+
+```bash
+doctools pdf-to-word 文档.pdf -o 输出目录
+doctools pdf-to-ppt 幻灯片.pdf -o 输出目录
+doctools pdf-to-images 文档.pdf -o 输出目录   # 每页一张 PNG
+doctools compress-images ./图片 -o 输出目录 -q 60   # 图片压缩，质量 60
 ```
 
 合并多个 PDF：
@@ -136,7 +151,8 @@ ruff check src tests web      # 代码检查
 - [x] 转 PDF（Word / PPT，基于 Office COM）
 - [x] 图片转 PDF（多合一）
 - [x] PDF 合并 / 拆分
-- [ ] PDF 转 PPT
+- [x] PDF 转 Word / PDF 转 PPT
+- [ ] 扫描件 OCR
 - [ ] Word 统一格式（字体、页边距等）
 - [ ] 文档站（MkDocs）
 

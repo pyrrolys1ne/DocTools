@@ -85,6 +85,78 @@ def remove_headers_cmd(
         raise typer.Exit(1)
 
 
+@app.command("remove-footers")
+def remove_footers_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 .docx 文件或包含 .docx 的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的 .docx，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """批量去除 Word（.docx）文档的页脚。"""
+    _run_operation_report(
+        "remove-footers",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("remove-headers-footers")
+def remove_headers_footers_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 .docx 文件或包含 .docx 的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的 .docx，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """批量同时去除 Word（.docx）文档的页眉与页脚。"""
+    _run_operation_report(
+        "remove-headers-footers",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
 def _run_operation_report(operation: str, **kwargs) -> None:
     """执行 run_operation 并逐条上报、按失败结果设置退出码。"""
     try:
@@ -238,6 +310,144 @@ def image_to_pdf_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("compress-images")
+def compress_images_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的图片文件或包含图片的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出目录。默认生成 {目录名}_compressed",
+    ),
+    quality: int = typer.Option(
+        80, "--quality", "-q", min=1, max=100, help="JPEG 重编码质量（1-100，默认 80）"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的图片，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """压缩图片（JPEG 按质量重编码，其余转优化 PNG）。"""
+    _run_operation_report(
+        "compress-images",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+        quality=quality,
+    )
+
+
+@app.command("pdf-to-word")
+def pdf_to_word_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 PDF 文件或包含 .pdf 的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .docx",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的 .pdf，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """把 PDF 转换为 Word（有损：复杂排版/扫描件质量有限）。"""
+    _run_operation_report(
+        "pdf-to-word",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("pdf-to-ppt")
+def pdf_to_ppt_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 PDF 文件或包含 .pdf 的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pptx",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的 .pdf，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """把 PDF 转换为 PPT（每页渲染成一张幻灯片）。"""
+    _run_operation_report(
+        "pdf-to-ppt",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        dry_run=dry_run,
+    )
+
+
+@app.command("pdf-to-images")
+def pdf_to_images_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="要转图片的 PDF 文件",
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="输出目录。默认生成 {stem}_images"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
+    ),
+) -> None:
+    """把 PDF 的每一页转成一张 PNG 图片。"""
+    _run_operation_report(
+        "pdf-to-images",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
         dry_run=dry_run,
     )
 

@@ -21,6 +21,21 @@ IMAGE_SUFFIXES = (
 )
 
 
+def compress_image(src: Path, dst: Path, quality: int = 80) -> None:
+    """压缩单张图片（作为 process_batch 的 worker 使用）。
+
+    JPEG 按给定质量重编码；其余格式转成 optimize 的 PNG。输出文件名由
+    dst 后缀决定（``_compress_name`` 保证 .jpg/.png 与内容一致）。
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(str(src)) as img:
+        img.load()
+        if dst.suffix.lower() == ".jpg":
+            img.convert("RGB").save(str(dst), "JPEG", quality=quality, optimize=True)
+        else:
+            img.save(str(dst), "PNG", optimize=True)
+
+
 def image_to_pdf(src: Path, dst: Path) -> None:
     """把单张图片转成 PDF（作为 process_batch 的 worker 使用）。"""
     dst.parent.mkdir(parents=True, exist_ok=True)
