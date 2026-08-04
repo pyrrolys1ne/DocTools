@@ -24,31 +24,21 @@ client = TestClient(app)
 def _wait_done(job_id: str, timeout: float = 10.0) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        data = client.get(f"/api/jobs/{job_id}").json()
+        data = client.get(f"/api/v1/jobs/{job_id}").json()
         if data["status"] in ("done", "failed"):
             return data
         time.sleep(0.05)
     raise TimeoutError(f"任务 {job_id} 超时未完成")
 
 
-def test_scan_lists_docx_recursively(tmp_path: Path) -> None:
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "a.txt").write_text("hi")
-    (tmp_path / "a.docx").write_bytes(b"x")
-    (tmp_path / "sub" / "b.docx").write_bytes(b"x")
-
-    resp = client.post(
-        "/api/scan", json={"source_path": str(tmp_path), "recursive": True}
-    )
-
+def test_health_check() -> None:
+    resp = client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json()["kind"] == "dir"
-    names = [f["name"] for f in resp.json()["files"]]
-    assert names == ["a.docx", "sub/b.docx"]
+    assert resp.json()["status"] == "ok"
 
 
 def test_drives_lists_at_least_one() -> None:
-    resp = client.get("/api/drives")
+    resp = client.get("/api/v1/drives")
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data["drives"], list)
@@ -62,9 +52,9 @@ def test_drives_include_special_folders(
     """常见用户目录（桌面/文档…）应解析为可访问的物理路径。"""
     (tmp_path / "Desktop").mkdir()
     (tmp_path / "Documents").mkdir()
-    monkeypatch.setattr("web.app.Path.home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr("web.routers.explore.Path.home", staticmethod(lambda: tmp_path))
 
-    resp = client.get("/api/drives")
+    resp = client.get("/api/v1/drives")
 
     assert resp.status_code == 200
     special = resp.json()["special"]
@@ -78,7 +68,7 @@ def test_explore_returns_parent_and_dirs(tmp_path: Path) -> None:
     (tmp_path / "a.txt").write_text("hi")
     (tmp_path / "a.docx").write_bytes(b"x")
 
-    resp = client.get(f"/api/explore?dir={tmp_path}")
+    resp = client.get(f"/api/v1/explore?dir={tmp_path}")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -93,7 +83,7 @@ def test_explore_hides_dollar_prefixed_dirs(tmp_path: Path) -> None:
     (tmp_path / "$RECYCLE.BIN").mkdir()
     (tmp_path / "sub").mkdir()
 
-    resp = client.get(f"/api/explore?dir={tmp_path}")
+    resp = client.get(f"/api/v1/explore?dir={tmp_path}")
 
     assert resp.status_code == 200
     assert resp.json()["dirs"] == ["sub"]
@@ -114,7 +104,7 @@ def test_explore_handles_unreadable_dir(tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(pathlib.Path, "iterdir", fake_iterdir)
 
-    resp = client.get(f"/api/explore?dir={locked}")
+    resp = client.get(f"/api/v1/explore?dir={locked}")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -124,12 +114,7 @@ def test_explore_handles_unreadable_dir(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def test_explore_404_on_missing_dir(tmp_path: Path) -> None:
-    resp = client.get(f"/api/explore?dir={tmp_path / 'nope'}")
-    assert resp.status_code == 404
-
-
-def test_scan_404_on_missing_dir(tmp_path: Path) -> None:
-    resp = client.post("/api/scan", json={"source_path": str(tmp_path / "nope")})
+    resp = client.get(f"/api/v1/explore?dir={tmp_path / 'nope'}")
     assert resp.status_code == 404
 
 
@@ -138,24 +123,13 @@ def test_explore_filters_files_by_ext(tmp_path: Path) -> None:
     (tmp_path / "b.pdf").write_bytes(b"x")
     (tmp_path / "c.pptx").write_bytes(b"x")
 
-    resp = client.get(f"/api/explore?dir={tmp_path}&exts=.pdf")
+    resp = client.get(f"/api/v1/explore?dir={tmp_path}&exts=.pdf")
 
     assert resp.status_code == 200
     assert resp.json()["files"] == ["b.pdf"]
 
-    resp2 = client.get(f"/api/explore?dir={tmp_path}&exts=.docx,.pptx")
+    resp2 = client.get(f"/api/v1/explore?dir={tmp_path}&exts=.docx,.pptx")
     assert resp2.json()["files"] == ["a.docx", "c.pptx"]
-
-
-def test_scan_single_file(tmp_path: Path) -> None:
-    _doc_with_headers().save(str(tmp_path / "a.docx"))
-
-    resp = client.post("/api/scan", json={"source_path": str(tmp_path / "a.docx")})
-
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["kind"] == "file"
-    assert data["files"] == [{"name": "a.docx", "size": (tmp_path / "a.docx").stat().st_size}]
 
 
 def test_job_dry_run(tmp_path: Path) -> None:
@@ -164,7 +138,7 @@ def test_job_dry_run(tmp_path: Path) -> None:
     _doc_with_headers().save(str(src / "a.docx"))
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "source_path": str(src),
             "output_path": str(tmp_path / "out"),
@@ -186,7 +160,7 @@ def test_job_processing(tmp_path: Path) -> None:
     _doc_with_headers().save(str(src / "a.docx"))
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"source_path": str(src), "output_path": str(tmp_path / "out")},
     )
     job_id = resp.json()["id"]
@@ -201,7 +175,7 @@ def test_job_single_file(tmp_path: Path) -> None:
     _doc_with_headers().save(str(tmp_path / "a.docx"))
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"source_path": str(tmp_path / "a.docx")},
     )
     job_id = resp.json()["id"]
@@ -219,7 +193,7 @@ def test_job_single_file_output_is_dir(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "source_path": str(tmp_path / "a.docx"),
             "output_path": str(out_dir),
@@ -240,12 +214,12 @@ def test_job_ws_streams_progress(tmp_path: Path) -> None:
     _doc_with_headers().save(str(src / "a.docx"))
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"source_path": str(src), "output_path": str(tmp_path / "out")},
     )
     job_id = resp.json()["id"]
 
-    with client.websocket_connect(f"/api/jobs/{job_id}/ws") as ws:
+    with client.websocket_connect(f"/api/v1/jobs/{job_id}/ws") as ws:
         data = ws.receive_json()
         assert data["id"] == job_id
         assert data["status"] in ("pending", "running", "done", "failed")
@@ -269,7 +243,7 @@ def test_job_merge_pdf(tmp_path: Path) -> None:
     merged = tmp_path / "merged.pdf"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "merge-pdf",
             "output_path": str(merged),
@@ -287,7 +261,7 @@ def test_job_merge_pdf(tmp_path: Path) -> None:
 
 def test_job_merge_requires_sources(tmp_path: Path) -> None:
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"operation": "merge-pdf", "output_path": str(tmp_path / "m.pdf")},
     )
     job_id = resp.json()["id"]
@@ -302,7 +276,7 @@ def test_job_split_pdf_ranges(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "split-pdf",
             "source_path": str(src),
@@ -324,7 +298,7 @@ def test_job_split_pdf_every_page(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"operation": "split-pdf", "source_path": str(src), "output_path": str(out)},
     )
     job_id = resp.json()["id"]
@@ -337,7 +311,7 @@ def test_job_split_pdf_every_page(tmp_path: Path) -> None:
 
 def test_job_split_requires_file(tmp_path: Path) -> None:
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"operation": "split-pdf", "source_path": str(tmp_path)},
     )
     job_id = resp.json()["id"]
@@ -372,7 +346,7 @@ def test_job_word_to_pdf(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "word-to-pdf",
             "source_path": str(src),
@@ -401,7 +375,7 @@ def test_job_ppt_to_pdf(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "ppt-to-pdf",
             "source_path": str(src),
@@ -431,7 +405,7 @@ def test_job_pdf_to_word(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "pdf-to-word",
             "source_path": str(tmp_path / "a.pdf"),
@@ -451,7 +425,7 @@ def test_job_pdf_to_ppt(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "pdf-to-ppt",
             "source_path": str(tmp_path / "a.pdf"),
@@ -472,7 +446,7 @@ def test_job_compress_images(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "compress-images",
             "source_path": str(tmp_path),
@@ -494,7 +468,7 @@ def test_job_pdf_to_images(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={
             "operation": "pdf-to-images",
             "source_path": str(tmp_path / "a.pdf"),
@@ -523,7 +497,7 @@ def test_job_image_to_pdf_merges_all(tmp_path: Path) -> None:
     out = tmp_path / "out"
 
     resp = client.post(
-        "/api/jobs",
+        "/api/v1/jobs",
         json={"operation": "image-to-pdf", "source_path": str(tmp_path), "output_path": str(out)},
     )
     job_id = resp.json()["id"]

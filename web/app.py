@@ -1,229 +1,64 @@
-"""DocTools 本地 Web 后端（FastAPI）。
+"""DocTools Web 后端（FastAPI）。
 
-绑定 127.0.0.1，只服务本机。交互模型是"目录路径"而非文件上传——
-后端直接按用户给出的路径读盘处理，文件不离开本机。
+本地工具：绑定 127.0.0.1，可托管前端构建产物（``DOCTOOLS_SERVE_FRONTEND=true``）。
+前后端分离部署：仅提供 /api/v1 接口，前端由独立静态站托管，配合 CORS。
+交互模型是"目录路径"而非文件上传——后端直接按用户给出的路径读盘处理。
 """
 
 from __future__ import annotations
 
-import asyncio
-import os
-import string
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
-from doctools.batch import discover_docx
-from web.jobs import JobManager
+from web.config import API_PREFIX, cors_origin_list, settings
+from web.routers import explore, jobs
 
 app = FastAPI(title="DocTools Web", description="批量文档处理本地 Web 界面")
-jobs = JobManager()
-
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-
-
-class ScanRequest(BaseModel):
-    source_path: str
-    recursive: bool = False
-
-
-class JobRequest(BaseModel):
-    operation: str = "remove-headers"
-    source_path: str = ""
-    output_path: str = ""
-    recursive: bool = False
-    dry_run: bool = False
-    # 单文件模式下，output_path 视为目录而非完整文件路径
-    output_is_dir: bool = False
-    # 合并 PDF：多选源文件（按顺序合并）
-    sources: list[str] = []
-    # 拆分 PDF：自定义页码范围（如 "1-3,5,8-12"；留空则每页一个）
-    page_ranges: str = ""
-    # 图片转 PDF：为 True 时把所有图片合并成一个 PDF，否则每张一个
-    merge_images: bool = False
-    # 图片压缩：JPEG 重编码质量（1-100）
-    quality: int = 80
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origin_list(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(explore.router, prefix=API_PREFIX)
+app.include_router(jobs.router, prefix=API_PREFIX)
 
 
-def _require_dir(path: str) -> Path:
-    p = Path(path)
-    if not p.is_dir():
-        raise HTTPException(404, f"目录不存在：{path}")
-    return p
-
-
-def _job_dict(job_id: str) -> dict:
-    job = jobs.get(job_id)
-    if job is None:
-        raise HTTPException(404, f"任务不存在：{job_id}")
-    return {
-        "id": job.id,
-        "status": job.status,
-        "total": job.total,
-        "done": job.done,
-        "current": job.current,
-        "error": job.error,
-        "results": [
-            {"src": str(r.src), "dst": str(r.dst), "ok": r.ok, "error": r.error}
-            for r in job.results
-        ],
-    }
-
-
-def _special_folders() -> list[dict[str, str]]:
-    """列出常见用户目录（桌面/文档/下载/图片/音乐/视频）的物理路径。
-
-    Windows 各语言版本的物理目录名均为英文（本地化只影响资源管理器里
-    的显示名），因此用 ``Path.home()`` 拼接即可得到真实可访问路径。
-    """
-    home = Path.home()
-    result: list[dict[str, str]] = []
-    for label, name in (
-        ("桌面", "Desktop"),
-        ("文档", "Documents"),
-        ("下载", "Downloads"),
-    ):
-        p = home / name
-        if p.is_dir():
-            result.append({"name": label, "path": str(p)})
-    return result
-
-
-@app.get("/api/drives")
-def drives() -> dict:
-    """列出可用的盘符（Windows 的 C: D: …）与常见用户目录（桌面/文档…）。"""
-    if os.name != "nt":
-        return {"drives": ["/"], "special": []}
-    found = [
-        f"{letter}:" for letter in string.ascii_uppercase if os.path.exists(f"{letter}:\\")
-    ]
-    return {"drives": found, "special": _special_folders()}
-
-
-@app.get("/api/explore")
-def explore(dir: str = ".", exts: str = ".docx") -> dict:
-    """列出目录下的子目录与匹配扩展名的文件，供前端文件夹浏览。
-
-    对权限受限的系统目录（如 $RECYCLE.BIN 的子层）做容错：读不到的
-    条目跳过、整个目录不可读时返回 ``error`` 提示，而不是 500 中断浏览。
-    ``exts`` 为逗号分隔的后缀（默认 ``.docx``），如 ``.pdf`` 或 ``.docx,.pptx``。
-    """
-    suffix_set = {s.strip().lower() for s in exts.split(",") if s.strip()}
-    p = _require_dir(dir).resolve()
-    dirs: list[str] = []
-    files: list[str] = []
-    listing_error: str | None = None
-    try:
-        for entry in p.iterdir():
-            try:
-                if entry.is_dir():
-                    dirs.append(entry.name)
-                elif entry.suffix.lower() in suffix_set:
-                    files.append(entry.name)
-            except OSError:
-                continue  # 单个条目访问失败（权限受限），跳过
-    except OSError as exc:
-        listing_error = f"无法读取该目录：{exc}"
-    # 隐藏以 $ 开头的系统特殊文件夹（如 $RECYCLE.BIN），避免误选
-    dirs = [d for d in dirs if not d.startswith("$")]
-    dirs.sort()
-    files.sort()
-    # 盘符根目录没有上级，此时 parent 为 null
-    parent = str(p.parent) if p.parent != p else None
-    return {"dir": str(p), "parent": parent, "dirs": dirs, "files": files, "error": listing_error}
-
-
-@app.post("/api/scan")
-def scan(req: ScanRequest) -> dict:
-    """预扫描，返回 .docx 清单。支持目录或单个文件作为源。"""
-    p = Path(req.source_path)
-    if not p.exists():
-        raise HTTPException(404, f"路径不存在：{req.source_path}")
-    if p.is_file():
-        if p.suffix.lower() != ".docx":
-            raise HTTPException(400, f"仅支持 .docx：{p}")
-        return {
-            "source_path": str(p.resolve()),
-            "kind": "file",
-            "recursive": False,
-            "files": [{"name": p.name, "size": p.stat().st_size}],
+@app.get("/api/health")
+def health() -> JSONResponse:
+    """健康检查（部署探测 / 运维用），返回服务信息与接口文档地址。"""
+    return JSONResponse(
+        {
+            "status": "ok",
+            "name": "DocTools API",
+            "docs": "/docs",
+            "openapi": "/openapi.json",
         }
-    files = discover_docx(p, req.recursive)
-    return {
-        "source_path": str(p.resolve()),
-        "kind": "dir",
-        "recursive": req.recursive,
-        "files": [
-            {"name": f.relative_to(p).as_posix(), "size": f.stat().st_size}
-            for f in files
-        ],
-    }
-
-
-@app.post("/api/jobs")
-def create_job(req: JobRequest) -> dict:
-    job = jobs.create(
-        operation=req.operation,
-        source_path=req.source_path,
-        output_path=req.output_path,
-        recursive=req.recursive,
-        dry_run=req.dry_run,
-        output_is_dir=req.output_is_dir,
-        sources=req.sources,
-        page_ranges=req.page_ranges,
-        merge_images=req.merge_images,
-        quality=req.quality,
     )
-    return {"id": job.id}
 
 
-@app.get("/api/jobs/{job_id}")
-def get_job(job_id: str) -> dict:
-    return _job_dict(job_id)
-
-
-@app.websocket("/api/jobs/{job_id}/ws")
-async def job_ws(websocket: WebSocket, job_id: str) -> None:
-    """任务进度流：任务完成前每 200ms 推一次快照。"""
-    await websocket.accept()
-    try:
-        while True:
-            job = jobs.get(job_id)
-            if job is None:
-                await websocket.close()
-                return
-            await websocket.send_json(
-                {
-                    "id": job.id,
-                    "status": job.status,
-                    "total": job.total,
-                    "done": job.done,
-                    "current": job.current,
-                    "error": job.error,
-                }
-            )
-            if job.status in ("done", "failed"):
-                break
-            await asyncio.sleep(0.2)
-    except WebSocketDisconnect:
-        pass
-
-
-if FRONTEND_DIST.is_dir():
-    # 托管前端构建产物；API 路由已先注册，不会被静态挂载遮蔽
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
-else:
+# 本地工具形态：后端一并托管前端构建产物，"/" 由前端接管。
+# 纯 API 部署或 dist 尚未构建时，"/" 返回服务信息。
+if not (settings.serve_frontend and Path(settings.frontend_dir).is_dir()):
 
     @app.get("/")
     def index() -> JSONResponse:
+        """服务信息（未托管前端时的根路径）。"""
         return JSONResponse(
             {
-                "name": "DocTools Web",
-                "message": "前端尚未构建。请先在 frontend/ 运行 npm install && npm run build，"
-                "或直接调用 /api 接口。",
-                "docs": "见 ARCHITECTURE.md",
+                "name": "DocTools API",
+                "docs": "/docs",
+                "openapi": "/openapi.json",
             }
         )
+
+if settings.serve_frontend:
+    # API 路由已先注册，不会被静态挂载遮蔽
+    frontend = Path(settings.frontend_dir)
+    if frontend.is_dir():
+        app.mount("/", StaticFiles(directory=str(frontend), html=True), name="frontend")

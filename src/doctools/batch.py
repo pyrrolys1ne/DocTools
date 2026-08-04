@@ -1,46 +1,33 @@
 """批量处理的编排层：文件发现、处理计划、多操作分发与逐文件执行。
 
 CLI 与 Web 后端都通过这里驱动批量处理，避免各自实现一遍循环逻辑。
-支持的操作：``remove-headers`` / ``to-pdf`` / ``merge-pdf`` / ``split-pdf``。
+操作通过 ``OPERATION_HANDLERS`` 注册表分发，新增操作只需注册一个 handler。
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from pypdf import PdfReader
 
 from doctools.docx import strip_footers, strip_headers, strip_headers_footers
-from doctools.model import FileResult, ProgressFn  # noqa: F401  # 从 batch 重新导出
+from doctools.model import (
+    CONVERT_SUFFIXES,
+    IMAGE_SUFFIXES,
+    PPT_SUFFIXES,
+    WORD_SUFFIXES,
+    FileResult,
+    ProgressFn,
+)
 
-# 各类转换支持的输入后缀
-WORD_SUFFIXES = (".docx", ".doc")
-PPT_SUFFIXES = (".pptx", ".ppt")
-IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff")
-# 兼容旧 to-pdf（Word + PPT 混合）
-CONVERT_SUFFIXES = WORD_SUFFIXES + PPT_SUFFIXES
-
+# 各转换操作允许的输入后缀
 FORMAT_SUFFIXES = {
     "to-pdf": CONVERT_SUFFIXES,
     "word-to-pdf": WORD_SUFFIXES,
     "ppt-to-pdf": PPT_SUFFIXES,
     "image-to-pdf": IMAGE_SUFFIXES,
-}
-
-OPERATIONS = {
-    "remove-headers",
-    "remove-footers",
-    "remove-headers-footers",
-    "to-pdf",
-    "word-to-pdf",
-    "ppt-to-pdf",
-    "image-to-pdf",
-    "pdf-to-word",
-    "pdf-to-ppt",
-    "pdf-to-images",
-    "compress-images",
-    "merge-pdf",
-    "split-pdf",
 }
 
 
@@ -52,11 +39,6 @@ def discover(
     """扫描目录下的文件（匹配任一后缀；recursive 时递归子目录），按路径排序。"""
     iterator = src.rglob("*") if recursive else src.glob("*")
     return sorted(f for f in iterator if f.is_file() and f.suffix.lower() in suffixes)
-
-
-def discover_docx(src: Path, recursive: bool = False) -> list[Path]:
-    """扫描目录下的 .docx 文件（保留向后兼容）。"""
-    return discover(src, recursive, (".docx",))
 
 
 def _build_plan(
@@ -181,6 +163,181 @@ def process_batch(
     return results
 
 
+# ---------------------------------------------------------------------------
+# 操作分发：每个操作一个 handler，签名 ``(op, params) -> list[FileResult]``。
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class OpParams:
+    """一次操作的全部参数（含解析后的 Path）。"""
+
+    source_path: str
+    output_path: str = ""
+    recursive: bool = False
+    dry_run: bool = False
+    output_is_dir: bool = False
+    sources: list[str] | None = None
+    page_ranges: str = ""
+    quality: int = 80
+    on_progress: ProgressFn | None = None
+
+    @property
+    def src(self) -> Path:
+        return Path(self.source_path)
+
+    @property
+    def dst(self) -> Path | None:
+        return Path(self.output_path) if self.output_path else None
+
+    @property
+    def srcs(self) -> list[Path]:
+        return [Path(p) for p in (self.sources or [])]
+
+
+def _dry_plan(plan: list[tuple[Path, Path]]) -> list[FileResult]:
+    """把计划转成 dry-run 结果（只报告不执行）。"""
+    return [FileResult(s, d, ok=True) for s, d in plan]
+
+
+def _handle_remove_parts(op: str, p: OpParams) -> list[FileResult]:
+    plan = build_plan(p.src, p.dst, p.recursive, p.output_is_dir)
+    if p.dry_run:
+        return _dry_plan(plan)
+    worker = {
+        "remove-headers": strip_headers,
+        "remove-footers": strip_footers,
+        "remove-headers-footers": strip_headers_footers,
+    }[op]
+    return process_batch(plan, on_progress=p.on_progress, worker=worker)
+
+
+def _handle_office_convert(op: str, p: OpParams) -> list[FileResult]:
+    plan = build_convert_plan(p.src, p.dst, p.recursive, p.output_is_dir, FORMAT_SUFFIXES[op])
+    if p.dry_run:
+        return _dry_plan(plan)
+    from doctools.office import OfficeConverter  # 惰性：pywin32 仅 Windows
+
+    with OfficeConverter() as converter:
+        return process_batch(plan, on_progress=p.on_progress, worker=converter.convert)
+
+
+def _handle_pdf_to_office(op: str, p: OpParams) -> list[FileResult]:
+    plan = build_convert_plan(
+        p.src, p.dst, p.recursive, p.output_is_dir,
+        suffixes=(".pdf",),
+        out_suffix=".docx" if op == "pdf-to-word" else ".pptx",
+        default_out_dir="docx" if op == "pdf-to-word" else "pptx",
+    )
+    if p.dry_run:
+        return _dry_plan(plan)
+    from doctools.pdf_convert import pdf_to_docx, pdf_to_pptx  # 惰性
+
+    worker = pdf_to_docx if op == "pdf-to-word" else pdf_to_pptx
+    return process_batch(plan, on_progress=p.on_progress, worker=worker)
+
+
+def _handle_pdf_to_images(op: str, p: OpParams) -> list[FileResult]:
+    if not p.src.is_file() or p.src.suffix.lower() != ".pdf":
+        raise ValueError(f"PDF 转图片的源必须是单个 .pdf 文件：{p.source_path}")
+    out_dir = p.dst if p.dst is not None else p.src.with_name(f"{p.src.stem}_images")
+    if p.dry_run:
+        import fitz  # noqa: PLC0415  # PyMuPDF
+
+        doc = fitz.open(str(p.src))
+        page_count = len(doc)
+        doc.close()
+        return [
+            FileResult(p.src, out_dir / f"{p.src.stem}_p{i}.png", ok=True)
+            for i in range(1, page_count + 1)
+        ]
+    from doctools.pdf_convert import pdf_to_images  # 惰性
+
+    return pdf_to_images(p.src, out_dir, p.on_progress)
+
+
+def _handle_image_to_pdf(op: str, p: OpParams) -> list[FileResult]:
+    from doctools.images import merge_images_to_pdf  # 惰性
+
+    # 图片转 PDF 只保留"多合一"：目录内所有图片（或单个图片）合成一个 PDF
+    images = discover(p.src, p.recursive, IMAGE_SUFFIXES) if p.src.is_dir() else [p.src]
+    if not images:
+        raise ValueError(f"目录中没有找到图片文件：{p.source_path}")
+    out_dir = p.dst if p.dst is not None else p.src.with_name(f"{p.src.stem}_images")
+    target = out_dir / "merged.pdf"
+    if p.dry_run:
+        return [FileResult(s, target, ok=True) for s in images]
+    return merge_images_to_pdf(images, target, p.on_progress)
+
+
+def _handle_compress_images(op: str, p: OpParams) -> list[FileResult]:
+    plan = build_compress_plan(p.src, p.dst, p.recursive, p.output_is_dir)
+    if p.dry_run:
+        return _dry_plan(plan)
+    from doctools.images import compress_image  # 惰性
+
+    worker = lambda s, d: compress_image(s, d, p.quality)  # noqa: E731
+    return process_batch(plan, on_progress=p.on_progress, worker=worker)
+
+
+def _handle_merge_pdf(op: str, p: OpParams) -> list[FileResult]:
+    if not p.srcs:
+        raise ValueError("合并 PDF 需要至少一个源文件")
+    merged = p.dst if p.dst is not None else p.srcs[0].with_name("merged.pdf")
+    if p.dry_run:
+        return [FileResult(s, merged, ok=True) for s in p.srcs]
+    if p.dst is None:
+        raise ValueError("合并 PDF 需要指定输出文件")
+    from doctools.pdf import merge_pdfs  # 惰性：pypdf 纯 Python
+
+    return merge_pdfs(p.srcs, p.dst, p.on_progress)
+
+
+def _handle_split_pdf(op: str, p: OpParams) -> list[FileResult]:
+    if not p.src.is_file() or p.src.suffix.lower() != ".pdf":
+        raise ValueError(f"拆分源必须是单个 PDF 文件：{p.source_path}")
+    out_dir = p.dst if p.dst is not None else p.src.with_name(f"{p.src.stem}_split")
+    from doctools.pdf import parse_ranges, split_pdf  # 惰性：pypdf 纯 Python
+
+    if p.dry_run:
+        reader = PdfReader(str(p.src))
+        count = len(reader.pages)
+        ranges = (
+            parse_ranges(p.page_ranges, count)
+            if p.page_ranges.strip()
+            else [(i, i) for i in range(1, count + 1)]
+        )
+        return [
+            FileResult(
+                p.src,
+                out_dir / (f"{p.src.stem}_p{s}-{e}.pdf" if s != e else f"{p.src.stem}_p{s}.pdf"),
+                ok=True,
+            )
+            for s, e in ranges
+        ]
+    return split_pdf(p.src, out_dir, p.page_ranges, p.on_progress)
+
+
+# 操作 → handler 注册表。新增操作只需在此登记 + 写一个 handler。
+OPERATION_HANDLERS: dict[str, Callable[[str, OpParams], list[FileResult]]] = {
+    "remove-headers": _handle_remove_parts,
+    "remove-footers": _handle_remove_parts,
+    "remove-headers-footers": _handle_remove_parts,
+    "to-pdf": _handle_office_convert,
+    "word-to-pdf": _handle_office_convert,
+    "ppt-to-pdf": _handle_office_convert,
+    "pdf-to-word": _handle_pdf_to_office,
+    "pdf-to-ppt": _handle_pdf_to_office,
+    "pdf-to-images": _handle_pdf_to_images,
+    "image-to-pdf": _handle_image_to_pdf,
+    "compress-images": _handle_compress_images,
+    "merge-pdf": _handle_merge_pdf,
+    "split-pdf": _handle_split_pdf,
+}
+
+OPERATIONS = frozenset(OPERATION_HANDLERS)
+
+
 def run_operation(
     operation: str,
     *,
@@ -191,130 +348,22 @@ def run_operation(
     output_is_dir: bool = False,
     sources: list[str] | None = None,
     page_ranges: str = "",
-    merge_images: bool = False,
     quality: int = 80,
     on_progress: ProgressFn | None = None,
 ) -> list[FileResult]:
     """按操作名执行并返回逐文件结果。参数校验失败抛 ``ValueError``。"""
-    if operation not in OPERATIONS:
+    handler = OPERATION_HANDLERS.get(operation)
+    if handler is None:
         raise ValueError(f"未知操作：{operation}")
-
-    src = Path(source_path)
-    dst = Path(output_path) if output_path else None
-    srcs = [Path(p) for p in (sources or [])]
-
-    if operation in ("remove-headers", "remove-footers", "remove-headers-footers"):
-        plan = build_plan(src, dst, recursive, output_is_dir)
-        if dry_run:
-            return [FileResult(s, d, ok=True) for s, d in plan]
-        worker = {
-            "remove-headers": strip_headers,
-            "remove-footers": strip_footers,
-            "remove-headers-footers": strip_headers_footers,
-        }[operation]
-        return process_batch(plan, on_progress=on_progress, worker=worker)
-
-    if operation in ("to-pdf", "word-to-pdf", "ppt-to-pdf"):
-        suffixes = FORMAT_SUFFIXES[operation]
-        plan = build_convert_plan(src, dst, recursive, output_is_dir, suffixes)
-        if dry_run:
-            return [FileResult(s, d, ok=True) for s, d in plan]
-        from doctools.office import OfficeConverter  # 惰性：pywin32 仅 Windows
-
-        with OfficeConverter() as converter:
-            return process_batch(plan, on_progress=on_progress, worker=converter.convert)
-
-    if operation in ("pdf-to-word", "pdf-to-ppt"):
-        plan = build_convert_plan(
-            src, dst, recursive, output_is_dir,
-            suffixes=(".pdf",),
-            out_suffix=".docx" if operation == "pdf-to-word" else ".pptx",
-            default_out_dir="docx" if operation == "pdf-to-word" else "pptx",
-        )
-        if dry_run:
-            return [FileResult(s, d, ok=True) for s, d in plan]
-        from doctools.pdf_convert import pdf_to_docx, pdf_to_pptx  # 惰性
-
-        worker = pdf_to_docx if operation == "pdf-to-word" else pdf_to_pptx
-        return process_batch(plan, on_progress=on_progress, worker=worker)
-
-    if operation == "pdf-to-images":
-        if not src.is_file() or src.suffix.lower() != ".pdf":
-            raise ValueError(f"PDF 转图片的源必须是单个 .pdf 文件：{source_path}")
-        out_dir = dst if dst is not None else src.with_name(f"{src.stem}_images")
-        from doctools.pdf_convert import pdf_to_images  # 惰性
-
-        if dry_run:
-            import fitz  # noqa: PLC0415  # PyMuPDF
-
-            doc = fitz.open(str(src))
-            page_count = len(doc)
-            doc.close()
-            return [
-                FileResult(src, out_dir / f"{src.stem}_p{i}.png", ok=True)
-                for i in range(1, page_count + 1)
-            ]
-        return pdf_to_images(src, out_dir, on_progress)
-
-    if operation == "image-to-pdf":
-        from doctools.images import merge_images_to_pdf
-
-        # 图片转 PDF 只保留"多合一"：目录内所有图片（或单个图片）合成一个 PDF
-        images = discover(src, recursive, IMAGE_SUFFIXES) if src.is_dir() else [src]
-        if not images:
-            raise ValueError(f"目录中没有找到图片文件：{source_path}")
-        out_dir = dst if dst is not None else src.with_name(f"{src.stem}_images")
-        target = out_dir / "merged.pdf"
-        if dry_run:
-            return [FileResult(s, target, ok=True) for s in images]
-        return merge_images_to_pdf(images, target, on_progress)
-
-    if operation == "compress-images":
-        plan = build_compress_plan(src, dst, recursive, output_is_dir)
-        if dry_run:
-            return [FileResult(s, d, ok=True) for s, d in plan]
-        from doctools.images import compress_image  # 惰性
-
-        worker = lambda s, d: compress_image(s, d, quality)  # noqa: E731
-        return process_batch(plan, on_progress=on_progress, worker=worker)
-
-    if operation == "merge-pdf":
-        if not srcs:
-            raise ValueError("合并 PDF 需要至少一个源文件")
-        merged = dst if dst is not None else srcs[0].with_name("merged.pdf")
-        if dry_run:
-            return [FileResult(s, merged, ok=True) for s in srcs]
-        if dst is None:
-            raise ValueError("合并 PDF 需要指定输出文件")
-        from doctools.pdf import merge_pdfs  # 惰性：pypdf 纯 Python
-
-        return merge_pdfs(srcs, dst, on_progress)
-
-    if operation == "split-pdf":
-        if not src.is_file():
-            raise ValueError(f"拆分源必须是单个 PDF 文件：{source_path}")
-        if src.suffix.lower() != ".pdf":
-            raise ValueError("拆分源必须是 .pdf 文件")
-        out_dir = dst if dst is not None else src.with_name(f"{src.stem}_split")
-        from doctools.pdf import parse_ranges, split_pdf
-
-        if dry_run:
-            reader = PdfReader(str(src))
-            count = len(reader.pages)
-            ranges = (
-                parse_ranges(page_ranges, count)
-                if page_ranges.strip()
-                else [(i, i) for i in range(1, count + 1)]
-            )
-            results = []
-            for start, end in ranges:
-                name = (
-                    f"{src.stem}_p{start}-{end}.pdf"
-                    if start != end
-                    else f"{src.stem}_p{start}.pdf"
-                )
-                results.append(FileResult(src, out_dir / name, ok=True))
-            return results
-        return split_pdf(src, out_dir, page_ranges, on_progress)
-
-    raise AssertionError(f"未处理的操作分支：{operation}")  # pragma: no cover
+    params = OpParams(
+        source_path=source_path,
+        output_path=output_path,
+        recursive=recursive,
+        dry_run=dry_run,
+        output_is_dir=output_is_dir,
+        sources=sources,
+        page_ranges=page_ranges,
+        quality=quality,
+        on_progress=on_progress,
+    )
+    return handler(operation, params)

@@ -8,18 +8,6 @@ from PIL import Image
 
 from doctools.model import FileResult, ProgressFn
 
-# 支持的图片后缀
-IMAGE_SUFFIXES = (
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".bmp",
-    ".gif",
-    ".webp",
-    ".tif",
-    ".tiff",
-)
-
 
 def compress_image(src: Path, dst: Path, quality: int = 80) -> None:
     """压缩单张图片（作为 process_batch 的 worker 使用）。
@@ -34,13 +22,6 @@ def compress_image(src: Path, dst: Path, quality: int = 80) -> None:
             img.convert("RGB").save(str(dst), "JPEG", quality=quality, optimize=True)
         else:
             img.save(str(dst), "PNG", optimize=True)
-
-
-def image_to_pdf(src: Path, dst: Path) -> None:
-    """把单张图片转成 PDF（作为 process_batch 的 worker 使用）。"""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(str(src)) as img:
-        img.convert("RGB").save(str(dst), "PDF")
 
 
 def merge_images_to_pdf(

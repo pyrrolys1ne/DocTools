@@ -43,6 +43,7 @@ dev = [
 ]
 web = [
     "fastapi>=0.110.0",
+    "pydantic-settings>=2.0",
     "uvicorn[standard]>=0.29.0",
 ]
 # 转 PDF（Word/PPT → PDF）需要本机安装 Microsoft Office。

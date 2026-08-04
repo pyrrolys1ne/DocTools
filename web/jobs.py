@@ -1,17 +1,22 @@
 """内存中的批处理任务管理。
 
 本地单用户场景无需数据库：Job 存内存，处理跑在后台线程。
-将来演变成线上服务时，把 JobManager 换成 Redis + 任务队列即可，
-``POST /api/jobs`` 的接口形状保持不变。
+将来演变成线上服务时，实现同一 ``JobStore`` 协议的 Redis + 任务队列即可，
+``POST /api/v1/jobs`` 的接口形状保持不变。
 """
 
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from doctools.batch import FileResult, run_operation
+
+# 任务完成后的保留时长；超期后从内存清理，避免常驻服务无限累积。
+JOB_TTL_SECONDS = 3600
 
 
 @dataclass
@@ -25,6 +30,34 @@ class Job:
     current: str | None = None
     error: str | None = None
     results: list[FileResult] = field(default_factory=list)
+    created_at: float = field(default_factory=time.time)
+    # 每次进度更新或任务结束时触发，WebSocket 据此推送，避免固定间隔轮询
+    updated: threading.Event = field(default_factory=threading.Event)
+
+    def to_dict(self) -> dict:
+        """任务快照，GET 与 WebSocket 共用的响应形状。"""
+        return {
+            "id": self.id,
+            "status": self.status,
+            "total": self.total,
+            "done": self.done,
+            "current": self.current,
+            "error": self.error,
+            "results": [
+                {"src": str(r.src), "dst": str(r.dst), "ok": r.ok, "error": r.error}
+                for r in self.results
+            ],
+        }
+
+
+class JobStore(Protocol):
+    """任务存储抽象：内存版 ``JobManager``；未来可换成 Redis + 任务队列实现。"""
+
+    def create(self, **kwargs: object) -> Job: ...
+
+    def get(self, job_id: str) -> Job | None: ...
+
+    def list(self) -> list[Job]: ...
 
 
 class JobManager:
@@ -33,6 +66,17 @@ class JobManager:
     def __init__(self) -> None:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
+
+    def _prune(self) -> None:
+        """清理已结束且超时的任务（顺带执行，不单独开后台任务）。"""
+        now = time.time()
+        stale = [
+            jid
+            for jid, job in self._jobs.items()
+            if job.status in ("done", "failed") and now - job.created_at > JOB_TTL_SECONDS
+        ]
+        for jid in stale:
+            self._jobs.pop(jid, None)
 
     def create(
         self,
@@ -44,11 +88,11 @@ class JobManager:
         output_is_dir: bool = False,
         sources: list[str] | None = None,
         page_ranges: str = "",
-        merge_images: bool = False,
         quality: int = 80,
     ) -> Job:
         job = Job(id=uuid.uuid4().hex[:8])
         with self._lock:
+            self._prune()
             self._jobs[job.id] = job
         thread = threading.Thread(
             target=self._run,
@@ -62,7 +106,6 @@ class JobManager:
                 output_is_dir,
                 sources,
                 page_ranges,
-                merge_images,
                 quality,
             ),
             daemon=True,
@@ -81,7 +124,6 @@ class JobManager:
         output_is_dir: bool,
         sources: list[str] | None,
         page_ranges: str,
-        merge_images: bool,
         quality: int,
     ) -> None:
         job.status = "running"
@@ -91,6 +133,7 @@ class JobManager:
             job.done = done
             job.current = str(result.src)
             job.results.append(result)
+            job.updated.set()
 
         try:
             results = run_operation(
@@ -102,22 +145,27 @@ class JobManager:
                 output_is_dir=output_is_dir,
                 sources=sources,
                 page_ranges=page_ranges,
-                merge_images=merge_images,
                 quality=quality,
                 on_progress=on_progress,
             )
         except Exception as exc:  # noqa: BLE001 - 参数校验/引擎缺失等统一上报
             job.status = "failed"
             job.error = str(exc)
+            job.updated.set()
             return
 
         job.results = results
         job.total = len(results)
         job.done = len(results)
         job.status = "done"
+        job.updated.set()
 
     def get(self, job_id: str) -> Job | None:
-        return self._jobs.get(job_id)
+        with self._lock:
+            self._prune()
+            return self._jobs.get(job_id)
 
     def list(self) -> list[Job]:
-        return list(self._jobs.values())
+        with self._lock:
+            self._prune()
+            return list(self._jobs.values())

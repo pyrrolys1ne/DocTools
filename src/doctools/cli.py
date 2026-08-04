@@ -196,7 +196,7 @@ def to_pdf_cmd(
         help="递归处理子目录中的文件，输出目录镜像源目录结构",
     ),
 ) -> None:
-    """把 Word/PPT 文档转换为 PDF（自动按后缀选择引擎，需要本机 Microsoft Office）。"""
+    """（已弃用）混合转换：改用 word-to-pdf / ppt-to-pdf。保留兼容，勿用于新脚本。"""
     _run_operation_report(
         "to-pdf",
         source_path=str(input_path),

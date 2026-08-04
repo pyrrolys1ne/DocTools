@@ -7,23 +7,11 @@ from pathlib import Path
 from PIL import Image
 from pypdf import PdfReader
 
-from doctools.images import compress_image, image_to_pdf, merge_images_to_pdf
+from doctools.images import compress_image, merge_images_to_pdf
 
 
 def _make_img(path: Path, color: tuple[int, int, int]) -> None:
     Image.new("RGB", (100, 80), color).save(path)
-
-
-def test_image_to_pdf_single(tmp_path: Path) -> None:
-    src = tmp_path / "a.png"
-    _make_img(src, (200, 40, 40))
-    dst = tmp_path / "a.pdf"
-
-    image_to_pdf(src, dst)
-
-    assert dst.exists()
-    assert dst.read_bytes().startswith(b"%PDF")
-    assert len(PdfReader(str(dst)).pages) == 1
 
 
 def test_merge_images_to_pdf_pages_in_order(tmp_path: Path) -> None:
