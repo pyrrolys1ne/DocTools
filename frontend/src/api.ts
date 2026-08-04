@@ -25,25 +25,31 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return resp.json() as Promise<T>;
 }
 
+/**
+ * API 基地址。本地工具默认同源（由后端托管前端）；前后端分离部署时
+ * 用 VITE_API_BASE 指向后端，如 VITE_API_BASE=https://api.example.com/api/v1。
+ */
+const API_BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
+
 export function explore(dir: string, exts = ".docx"): Promise<ExploreResult> {
   return get<ExploreResult>(
-    `/api/explore?dir=${encodeURIComponent(dir)}&exts=${encodeURIComponent(exts)}`,
+    `${API_BASE}/explore?dir=${encodeURIComponent(dir)}&exts=${encodeURIComponent(exts)}`,
   );
 }
 
 export function drives(): Promise<DrivesResult> {
-  return get<DrivesResult>("/api/drives");
+  return get<DrivesResult>(`${API_BASE}/drives`);
 }
 
 export function createJob(opts: CreateJobParams): Promise<{ id: string }> {
-  return post<{ id: string }>("/api/jobs", opts);
+  return post<{ id: string }>(`${API_BASE}/jobs`, opts);
 }
 
 export function getJob(jobId: string): Promise<JobStatus> {
-  return fetch(`/api/jobs/${jobId}`).then((r) => r.json() as Promise<JobStatus>);
+  return fetch(`${API_BASE}/jobs/${jobId}`).then((r) => r.json() as Promise<JobStatus>);
 }
 
 export function jobWsUrl(jobId: string): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${location.host}/api/jobs/${jobId}/ws`;
+  return `${proto}://${location.host}${API_BASE}/jobs/${jobId}/ws`;
 }
