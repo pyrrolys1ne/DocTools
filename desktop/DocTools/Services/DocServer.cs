@@ -15,7 +15,10 @@ public sealed class DocServer : IDisposable
 
     public void Start()
     {
-        var exeDir = AppContext.BaseDirectory;
+        // 单文件发布时 AppContext.BaseDirectory 指向解压临时目录，
+        // 必须用 Environment.ProcessPath 定位真实的 exe 所在目录。
+        var exeDir = Path.GetDirectoryName(Environment.ProcessPath)
+            ?? throw new InvalidOperationException("无法确定可执行文件路径。");
         var exe = new[]
             {
                 Path.Combine(exeDir, "docserver", "docserver.exe"),
