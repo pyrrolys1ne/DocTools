@@ -1,0 +1,30 @@
+name: package
+
+on:
+  push:
+    branches:
+      - feature/cs-desktop   # TODO: 分支合并后移除，仅保留 tag / 手动触发
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install Python deps
+        run: pip install -e ".[web]" pyinstaller
+      - name: Build docserver (PyInstaller)
+        run: .\packaging\build_server.ps1
+      - name: Build WPF client (dotnet publish)
+        run: .\packaging\build_client.ps1
+      - name: Assemble zip
+        run: .\packaging\package.ps1 -SkipBuild
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DocTools-win-x64
+          path: dist/DocTools-win-x64.zip

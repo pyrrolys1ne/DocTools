@@ -1,6 +1,6 @@
 # DocTools
 
-本地优先的批量文档处理工具，提供命令行与 Web 界面。支持 Word 页眉/页脚移除、Office 与 PDF 互转、PDF 合并拆分、图片压缩等 13 项操作，所有文件均在本机处理，不上传。
+本地优先的批量文档处理工具，提供命令行、Windows 桌面客户端与本地 Web API。支持 Word 页眉/页脚移除、Office 与 PDF 互转、PDF 合并拆分、图片压缩等 13 项操作，所有文件均在本机处理，不上传。
 
 > 项目处于 Alpha 阶段：功能已可用，接口可能在后续版本中调整。
 
@@ -12,9 +12,8 @@
   - [环境要求](#环境要求)
   - [安装](#安装)
   - [命令行使用](#命令行使用)
-  - [Web 界面使用](#web-界面使用)
-    - [本地工具形态（推荐，单进程）](#本地工具形态推荐单进程)
-    - [开发形态（前端热更新）](#开发形态前端热更新)
+  - [桌面客户端使用](#桌面客户端使用)
+  - [Web API 调试](#web-api-调试)
   - [服务配置](#服务配置)
   - [架构](#架构)
   - [开发](#开发)
@@ -42,15 +41,15 @@
 
 - **递归处理**子目录（`--recursive`），输出目录镜像源目录结构；
 - **单文件失败不中断整批**，逐文件上报 OK/FAIL；
-- **本地 Web 界面**：目录浏览、实时进度、逐文件结果，功能宫格导航；
+- **Windows 桌面客户端**（WPF）：本地服务随包启动，无需安装 Python / Node；
 - **dry-run**（`--dry-run`）：只预览处理计划，不写入文件。
 
 ## 环境要求
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| Python | ≥ 3.10 | 运行环境 |
-| Node.js（可选） | ≥ 18 | 前端构建（`npm run build` / `npm run dev`） |
+| Python | ≥ 3.10 | 核心库、CLI 与 Web API 运行环境 |
+| .NET 8 SDK（可选） | ≥ 8.0 | 构建桌面客户端（`packaging/build_client.ps1`） |
 | Microsoft Office（可选） | Windows 桌面版 | `word-to-pdf` / `ppt-to-pdf` 使用 COM 自动化 |
 
 ## 安装
@@ -125,25 +124,36 @@ doctools split-pdf 文档.pdf -o ./拆分结果 --ranges "1-3,5,8-12"
 
 各命令详细选项见 `doctools <命令> --help`。
 
-## Web 界面使用
+## 桌面客户端使用
 
-### 本地工具形态（推荐，单进程）
+桌面客户端是 C/S 形态：`DocTools.exe`（WPF）启动时自动拉起随包的本地 API 服务 `docserver\docserver.exe`（由 `web/` 后端用 PyInstaller 打包），处理完成后随程序退出关闭。交互模型与命令行一致：填写/浏览本地路径，不涉及文件上传。
 
-```bash
-cd frontend && npm install && npm run build    # 构建前端（只需一次）
-cd .. && python -m web                          # 启动后端并托管前端
-```
-
-打开 <http://127.0.0.1:8000> 即可使用。首页为功能宫格，每个功能一个小方块，点开进入对应页面；左上角「返回」回到宫格。流程：浏览或输入路径 → 开始处理 → 实时进度 + 逐文件 OK/FAIL 结果。
-
-### 开发形态（前端热更新）
+构建与打包（Windows，需 .NET 8 SDK）：
 
 ```bash
-python -m web                                   # 终端 1：后端 http://127.0.0.1:8000
-cd frontend && npm run dev                      # 终端 2：前端 http://localhost:5173
+.\packaging\package.ps1          # 构建 docserver + DocTools.exe 并打包为 zip
 ```
 
-Vite dev server 会把 `/api` 请求（含 WebSocket）代理到后端。
+产物为 `dist\DocTools-win-x64.zip`，解压后运行 `DocTools.exe` 即可。目录结构：
+
+```
+DocTools.exe        桌面客户端
+docserver\          本地 API 服务（PyInstaller onedir）
+README.txt          使用说明
+```
+
+> 旧的 React 前端已归档（tag `archive/frontend-v0.3`），源码保留在 `frontend/` 但不再构建、不再随 Web 后端托管。
+
+## Web API 调试
+
+`web/` 后端保留为个人开发调试工具：提供 `/api/v1` 接口与 `/docs` 调试文档，不托管前端。
+
+```bash
+python -m web                           # http://127.0.0.1:8000，打开 /docs 调试
+python -m web --port 0                  # 自动选择空闲端口，stdout 打印 DOCSERVER_PORT=<port>
+```
+
+桌面客户端即通过该 API 通信（REST 创建/查询任务 + WebSocket 进度流），接口形状见 `web/schemas.py`。
 
 ## 服务配置
 
@@ -152,32 +162,26 @@ Web 服务通过环境变量配置（前缀 `DOCTOOLS_`，也支持 `.env` 文�
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
 | `DOCTOOLS_HOST` | `127.0.0.1` | 监听地址 |
-| `DOCTOOLS_PORT` | `8000` | 监听端口 |
-| `DOCTOOLS_SERVE_FRONTEND` | `true` | 是否由后端托管前端构建产物 |
-| `DOCTOOLS_FRONTEND_DIR` | `frontend/dist` | 前端构建产物目录 |
-| `DOCTOOLS_CORS_ORIGINS` | `http://localhost:5173,…` | 前后端分离时的跨域来源（逗号分隔） |
+| `DOCTOOLS_PORT` | `8000` | 监听端口；桌面客户端传 `--port 0` 自动选端口 |
+| `DOCTOOLS_RELOAD` | `false` | 开发调试时热重载（打包环境必须关闭） |
+| `DOCTOOLS_CORS_ORIGINS` | `http://localhost:5173,…` | 浏览器跨域调试来源（逗号分隔）；桌面客户端不走 CORS |
 
-API 统一挂在 `/api/v1` 前缀下；健康检查为 `GET /api/health`。纯 API / 前后端分离部署：
-
-```bash
-DOCTOOLS_SERVE_FRONTEND=false python -m web    # 只提供接口，"/" 返回服务信息
-cd frontend && VITE_API_BASE=https://api.example.com/api/v1 npm run build
-```
+API 统一挂在 `/api/v1` 前缀下；健康检查为 `GET /api/health`。
 
 ## 架构
 
 见 [ARCHITECTURE.md](ARCHITECTURE.md)。要点：
 
 - 核心为纯库（`src/doctools/`），不依赖任何 Web / CLI 框架，可被任意消费方复用；
-- 所有操作集中在 `OPERATION_HANDLERS` 注册表，CLI 与 Web 共享同一编排层（`batch.py`）；
-- Web 后端（`web/`，FastAPI）与前端（`frontend/`，React + Vite + shadcn/ui）分层，接口版本化，预留线上 BS 演进空间。
+- 所有操作集中在 `OPERATION_HANDLERS` 注册表，CLI 与 Web（以及桌面客户端经 API）共享同一编排层（`batch.py`）；
+- 三种消费形态：CLI（`src/doctools/cli.py`）、本地 Web API（`web/`，开发调试）、Windows 桌面客户端（`desktop/`，C/S 产品形态）。
 
 ## 开发
 
 ```bash
 pytest                      # 运行后端与库测试
 ruff check .                # 代码检查
-cd frontend && npx tsc --noEmit   # 前端类型检查
+dotnet build desktop\DocTools\DocTools.csproj   # 桌面客户端编译检查
 ```
 
 ## 路线图
@@ -185,12 +189,14 @@ cd frontend && npx tsc --noEmit   # 前端类型检查
 - [x] 阶段 0：项目脚手架 + Word 批量去页眉
 - [x] 去页眉连横线（段落边框 + Header 样式边框）
 - [x] 递归子目录
-- [x] 本地 Web 界面（Tailwind v4 + shadcn/ui）
+- [x] 本地 Web 界面（Tailwind v4 + shadcn/ui，已归档）
 - [x] 转 PDF（Word / PPT，基于 Office COM）
 - [x] 图片转 PDF（多合一）
 - [x] PDF 合并 / 拆分
 - [x] PDF 转 Word / PDF 转 PPT / PDF 转图片 / 图片压缩
-- [x] BS 化：前后端分离部署、API 版本化、任务存储抽象
+- [x] BS 化：API 版本化、任务存储抽象
+- [x] C/S 化：WPF 桌面客户端 + PyInstaller 打包分发
+- [ ] 桌面客户端安装器（Inno Setup / MSIX）
 - [ ] 文档站（MkDocs）
 
 ## 许可
