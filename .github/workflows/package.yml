@@ -2,8 +2,6 @@ name: package
 
 on:
   push:
-    branches:
-      - feature/cs-desktop   # TODO: 分支合并后移除，仅保留 tag / 手动触发
     tags:
       - "v*"
   workflow_dispatch:
