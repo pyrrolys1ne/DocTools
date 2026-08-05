@@ -507,3 +507,14 @@ def test_job_image_to_pdf_merges_all(tmp_path: Path) -> None:
     assert data["total"] == 2
     assert (out / "merged.pdf").exists()
     assert len(PdfReader(str(out / "merged.pdf")).pages) == 2
+
+
+def test_free_port_returns_bindable_port() -> None:
+    """--port 0 用的空闲端口应可被 socket 绑定（随后交给 uvicorn）。"""
+    import socket
+
+    from web.__main__ import free_port
+
+    port = free_port()
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", port))
