@@ -1,0 +1,124 @@
+<Window x:Class="DocTools.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DocTools" Height="720" Width="980" MinHeight="560" MinWidth="760"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+    <Grid Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 操作列表 -->
+        <ListBox Grid.Column="0" ItemsSource="{Binding Operations}" SelectedItem="{Binding SelectedOperation}"
+                 Margin="0,0,12,0" FontSize="14">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Label}" Padding="2"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- 表单区 -->
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock FontSize="18" FontWeight="Bold" Text="{Binding SelectedOperationLabel}"/>
+                <TextBlock Text="{Binding SelectedOperationHint}" Foreground="Gray" Margin="0,2,0,12" TextWrapping="Wrap"/>
+
+                <!-- 批量操作 -->
+                <StackPanel Visibility="{Binding IsBatchVisible, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="源路径（文件或目录）"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择目录" Command="{Binding BrowseDirCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <Button DockPanel.Dock="Right" Content="选择文件" Command="{Binding BrowseFileCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <TextBlock Text="输出目录（可选，默认自动生成）"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择目录" Command="{Binding BrowseOutputDirCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <CheckBox Content="递归子目录" IsChecked="{Binding IsRecursive}" Margin="0,0,16,0"/>
+                        <CheckBox Content="仅预览（dry-run）" IsChecked="{Binding IsDryRun}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                               Visibility="{Binding IsCompressVisible, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="质量：" VerticalAlignment="Center"/>
+                        <Slider Width="180" Minimum="1" Maximum="100" Value="{Binding Quality}"/>
+                        <TextBlock Text="{Binding Quality}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 合并 PDF -->
+                <StackPanel Visibility="{Binding IsMergeVisible, Converter={StaticResource BoolToVis}}">
+                    <DockPanel Margin="0,0,0,4">
+                        <Button DockPanel.Dock="Right" Content="添加 PDF" Command="{Binding AddMergeFilesCommand}" Padding="10,2"/>
+                        <TextBlock Text="按添加顺序合并以下文件：" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <ListBox ItemsSource="{Binding MergeSources}" Height="140"/>
+                    <TextBlock Text="输出 PDF 文件"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择文件" Command="{Binding BrowseMergeOutputCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <!-- 拆分 PDF -->
+                <StackPanel Visibility="{Binding IsSplitVisible, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="源 PDF 文件"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择文件" Command="{Binding BrowseFileCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <TextBlock Text="输出目录（可选，默认自动生成）"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择目录" Command="{Binding BrowseOutputDirCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <TextBlock Text="页码范围（如 1-3,5,8-12；留空则每页一个）"/>
+                    <TextBox Text="{Binding PageRanges, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,6"/>
+                </StackPanel>
+
+                <!-- PDF 转图片 -->
+                <StackPanel Visibility="{Binding IsPdfToImagesVisible, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="源 PDF 文件"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择文件" Command="{Binding BrowseFileCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <TextBlock Text="输出目录（可选，默认自动生成）"/>
+                    <DockPanel Margin="0,2,0,6">
+                        <Button DockPanel.Dock="Right" Content="选择目录" Command="{Binding BrowseOutputDirCommand}" Margin="4,0,0,0" Padding="10,2"/>
+                        <TextBox Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <Button Content="开始处理" Command="{Binding StartCommand}" IsEnabled="{Binding NotBusy}"
+                        HorizontalAlignment="Left" Padding="28,6" Margin="0,14,0,0" FontSize="14"/>
+
+                <TextBlock Text="{Binding Error}" Foreground="Red" Margin="0,8,0,0" TextWrapping="Wrap"/>
+
+                <StackPanel Visibility="{Binding IsRunningVisible, Converter={StaticResource BoolToVis}}" Margin="0,14,0,0">
+                    <TextBlock Text="{Binding StatusText}"/>
+                    <ProgressBar Height="18" Minimum="0" Maximum="100" Value="{Binding Progress}"/>
+                    <TextBlock Text="{Binding CurrentFile}" Foreground="Gray" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <DataGrid ItemsSource="{Binding Results}" AutoGenerateColumns="False" IsReadOnly="True"
+                          Margin="0,14,0,0" MaxHeight="240" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="状态" Binding="{Binding OkText}" Width="60"/>
+                        <DataGridTextColumn Header="源文件" Binding="{Binding Src}" Width="*"/>
+                        <DataGridTextColumn Header="输出" Binding="{Binding Dst}" Width="*"/>
+                        <DataGridTextColumn Header="错误" Binding="{Binding Error}" Width="2*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <TextBlock Text="{Binding SummaryText}" Margin="0,6,0,0" Foreground="Gray"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

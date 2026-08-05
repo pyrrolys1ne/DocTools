@@ -1,12 +1,10 @@
 """DocTools Web 后端配置。
 
 环境变量前缀 ``DOCTOOLS_``，支持 ``.env`` 文件。例如：
-``DOCTOOLS_HOST=0.0.0.0``、``DOCTOOLS_SERVE_FRONTEND=false``。
+``DOCTOOLS_HOST=0.0.0.0``、``DOCTOOLS_PORT=9000``、``DOCTOOLS_RELOAD=true``。
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,14 +21,11 @@ class Settings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8000
-    reload: bool = True
+    # 打包后的桌面客户端以子进程方式拉起本服务，必须关闭 reload；
+    # 个人开发调试时可用 DOCTOOLS_RELOAD=true 开启热重载。
+    reload: bool = False
 
-    # 本地工具默认由后端一并托管前端构建产物；
-    # 前后端分离部署时置 False（前端由独立静态站 / 对象存储提供）。
-    serve_frontend: bool = True
-    frontend_dir: str = str(Path(__file__).resolve().parent.parent / "frontend" / "dist")
-
-    # 前后端分离部署时允许的跨域来源（逗号分隔）。
+    # 开发调试时浏览器跨域访问 API 的来源（逗号分隔）；桌面客户端不走 CORS。
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
 

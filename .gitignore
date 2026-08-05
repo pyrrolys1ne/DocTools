@@ -33,3 +33,8 @@ frontend/dist/
 # 处理输出
 *_cleaned.docx
 *_cleaned/
+
+
+# C# 桌面客户端
+desktop/**/bin/
+desktop/**/obj/
