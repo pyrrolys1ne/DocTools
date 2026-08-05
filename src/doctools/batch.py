@@ -10,8 +10,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from pypdf import PdfReader
-
 from doctools.docx import strip_footers, strip_headers, strip_headers_footers
 from doctools.model import (
     CONVERT_SUFFIXES,
@@ -175,7 +173,6 @@ class OpParams:
     source_path: str
     output_path: str = ""
     recursive: bool = False
-    dry_run: bool = False
     output_is_dir: bool = False
     sources: list[str] | None = None
     page_ranges: str = ""
@@ -194,16 +191,8 @@ class OpParams:
     def srcs(self) -> list[Path]:
         return [Path(p) for p in (self.sources or [])]
 
-
-def _dry_plan(plan: list[tuple[Path, Path]]) -> list[FileResult]:
-    """把计划转成 dry-run 结果（只报告不执行）。"""
-    return [FileResult(s, d, ok=True) for s, d in plan]
-
-
 def _handle_remove_parts(op: str, p: OpParams) -> list[FileResult]:
     plan = build_plan(p.src, p.dst, p.recursive, p.output_is_dir)
-    if p.dry_run:
-        return _dry_plan(plan)
     worker = {
         "remove-headers": strip_headers,
         "remove-footers": strip_footers,
@@ -214,8 +203,6 @@ def _handle_remove_parts(op: str, p: OpParams) -> list[FileResult]:
 
 def _handle_office_convert(op: str, p: OpParams) -> list[FileResult]:
     plan = build_convert_plan(p.src, p.dst, p.recursive, p.output_is_dir, FORMAT_SUFFIXES[op])
-    if p.dry_run:
-        return _dry_plan(plan)
     from doctools.office import OfficeConverter  # 惰性：pywin32 仅 Windows
 
     with OfficeConverter() as converter:
@@ -229,8 +216,6 @@ def _handle_pdf_to_office(op: str, p: OpParams) -> list[FileResult]:
         out_suffix=".docx" if op == "pdf-to-word" else ".pptx",
         default_out_dir="docx" if op == "pdf-to-word" else "pptx",
     )
-    if p.dry_run:
-        return _dry_plan(plan)
     from doctools.pdf_convert import pdf_to_docx, pdf_to_pptx  # 惰性
 
     worker = pdf_to_docx if op == "pdf-to-word" else pdf_to_pptx
@@ -241,16 +226,6 @@ def _handle_pdf_to_images(op: str, p: OpParams) -> list[FileResult]:
     if not p.src.is_file() or p.src.suffix.lower() != ".pdf":
         raise ValueError(f"PDF 转图片的源必须是单个 .pdf 文件：{p.source_path}")
     out_dir = p.dst if p.dst is not None else p.src.with_name(f"{p.src.stem}_images")
-    if p.dry_run:
-        import fitz  # noqa: PLC0415  # PyMuPDF
-
-        doc = fitz.open(str(p.src))
-        page_count = len(doc)
-        doc.close()
-        return [
-            FileResult(p.src, out_dir / f"{p.src.stem}_p{i}.png", ok=True)
-            for i in range(1, page_count + 1)
-        ]
     from doctools.pdf_convert import pdf_to_images  # 惰性
 
     return pdf_to_images(p.src, out_dir, p.on_progress)
@@ -265,15 +240,11 @@ def _handle_image_to_pdf(op: str, p: OpParams) -> list[FileResult]:
         raise ValueError(f"目录中没有找到图片文件：{p.source_path}")
     out_dir = p.dst if p.dst is not None else p.src.with_name(f"{p.src.stem}_images")
     target = out_dir / "merged.pdf"
-    if p.dry_run:
-        return [FileResult(s, target, ok=True) for s in images]
     return merge_images_to_pdf(images, target, p.on_progress)
 
 
 def _handle_compress_images(op: str, p: OpParams) -> list[FileResult]:
     plan = build_compress_plan(p.src, p.dst, p.recursive, p.output_is_dir)
-    if p.dry_run:
-        return _dry_plan(plan)
     from doctools.images import compress_image  # 惰性
 
     worker = lambda s, d: compress_image(s, d, p.quality)  # noqa: E731
@@ -283,9 +254,6 @@ def _handle_compress_images(op: str, p: OpParams) -> list[FileResult]:
 def _handle_merge_pdf(op: str, p: OpParams) -> list[FileResult]:
     if not p.srcs:
         raise ValueError("合并 PDF 需要至少一个源文件")
-    merged = p.dst if p.dst is not None else p.srcs[0].with_name("merged.pdf")
-    if p.dry_run:
-        return [FileResult(s, merged, ok=True) for s in p.srcs]
     if p.dst is None:
         raise ValueError("合并 PDF 需要指定输出文件")
     from doctools.pdf import merge_pdfs  # 惰性：pypdf 纯 Python
@@ -297,24 +265,8 @@ def _handle_split_pdf(op: str, p: OpParams) -> list[FileResult]:
     if not p.src.is_file() or p.src.suffix.lower() != ".pdf":
         raise ValueError(f"拆分源必须是单个 PDF 文件：{p.source_path}")
     out_dir = p.dst if p.dst is not None else p.src.with_name(f"{p.src.stem}_split")
-    from doctools.pdf import parse_ranges, split_pdf  # 惰性：pypdf 纯 Python
+    from doctools.pdf import split_pdf  # 惰性：pypdf 纯 Python
 
-    if p.dry_run:
-        reader = PdfReader(str(p.src))
-        count = len(reader.pages)
-        ranges = (
-            parse_ranges(p.page_ranges, count)
-            if p.page_ranges.strip()
-            else [(i, i) for i in range(1, count + 1)]
-        )
-        return [
-            FileResult(
-                p.src,
-                out_dir / (f"{p.src.stem}_p{s}-{e}.pdf" if s != e else f"{p.src.stem}_p{s}.pdf"),
-                ok=True,
-            )
-            for s, e in ranges
-        ]
     return split_pdf(p.src, out_dir, p.page_ranges, p.on_progress)
 
 
@@ -344,7 +296,6 @@ def run_operation(
     source_path: str,
     output_path: str = "",
     recursive: bool = False,
-    dry_run: bool = False,
     output_is_dir: bool = False,
     sources: list[str] | None = None,
     page_ranges: str = "",
@@ -359,7 +310,6 @@ def run_operation(
         source_path=source_path,
         output_path=output_path,
         recursive=recursive,
-        dry_run=dry_run,
         output_is_dir=output_is_dir,
         sources=sources,
         page_ranges=page_ranges,

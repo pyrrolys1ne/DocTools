@@ -132,28 +132,6 @@ def test_explore_filters_files_by_ext(tmp_path: Path) -> None:
     assert resp2.json()["files"] == ["a.docx", "c.pptx"]
 
 
-def test_job_dry_run(tmp_path: Path) -> None:
-    src = tmp_path / "in"
-    src.mkdir()
-    _doc_with_headers().save(str(src / "a.docx"))
-
-    resp = client.post(
-        "/api/v1/jobs",
-        json={
-            "source_path": str(src),
-            "output_path": str(tmp_path / "out"),
-            "dry_run": True,
-        },
-    )
-    job_id = resp.json()["id"]
-
-    data = _wait_done(job_id)
-    assert data["status"] == "done"
-    assert data["total"] == 1
-    assert data["done"] == 1
-    assert not (tmp_path / "out" / "a.docx").exists()  # dry-run 不写文件
-
-
 def test_job_processing(tmp_path: Path) -> None:
     src = tmp_path / "in"
     src.mkdir()

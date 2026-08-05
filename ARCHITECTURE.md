@@ -81,9 +81,8 @@ def run_operation(operation, *, source_path, output_path, …, on_progress) -> l
 ```
 
 - **新增操作** = 写一个 handler + 在注册表登记一行；CLI 命令与 Web 表单复用同一注册表。
-- **统一参数**：`OpParams`（源路径 / 输出路径 / 递归 / dry-run / 多选源 / 页码范围 / 质量）跨操作复用。
+- **统一参数**：`OpParams`（源路径 / 输出路径 / 递归 / 多选源 / 页码范围 / 质量）跨操作复用。
 - **逐文件容错**：`process_batch` 单文件失败只记入 `FileResult.error`，不中断整批。
-- **dry-run**：只构建处理计划、报告不执行，CLI 与 Web 共用。
 
 ### 操作清单
 

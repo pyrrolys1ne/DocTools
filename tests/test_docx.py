@@ -134,17 +134,6 @@ def test_cli_remove_headers_single_file(tmp_path: Path) -> None:
     assert all(p.text == "" for s in out.sections for p in s.header.paragraphs)
 
 
-def test_cli_remove_headers_dry_run(tmp_path: Path) -> None:
-    src = tmp_path / "in.docx"
-    _doc_with_headers().save(str(src))
-
-    result = runner.invoke(app, ["remove-headers", str(src), "--dry-run"])
-
-    assert result.exit_code == 0
-    assert "[dry-run]" in result.stdout
-    assert not (tmp_path / "in_cleaned.docx").exists()
-
-
 def test_cli_rejects_non_docx(tmp_path: Path) -> None:
     src = tmp_path / "notes.txt"
     src.write_text("hi")

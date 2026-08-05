@@ -43,7 +43,6 @@
                     </DockPanel>
                     <StackPanel Orientation="Horizontal">
                         <CheckBox Content="递归子目录" IsChecked="{Binding IsRecursive}" Margin="0,0,16,0"/>
-                        <CheckBox Content="仅预览（dry-run）" IsChecked="{Binding IsDryRun}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
                                Visibility="{Binding IsCompressVisible, Converter={StaticResource BoolToVis}}">

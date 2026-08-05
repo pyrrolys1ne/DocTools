@@ -22,7 +22,6 @@ class JobRequest(BaseModel):
     source_path: str = ""
     output_path: str = ""
     recursive: bool = False
-    dry_run: bool = False
     # 单文件模式下，output_path 视为目录而非完整文件路径
     output_is_dir: bool = False
     # 合并 PDF：多选源文件（按顺序合并）

@@ -59,9 +59,6 @@ def remove_headers_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -74,11 +71,6 @@ def remove_headers_cmd(
         pairs = build_plan(input_path, output, recursive)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-
-    if dry_run:
-        for src, dst in pairs:
-            typer.echo(f"[dry-run] 将处理 {src} -> {dst}")
-        return
 
     results = process_batch(pairs, on_progress=_report)
     if any(not r.ok for r in results):
@@ -101,9 +93,6 @@ def remove_footers_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -117,7 +106,6 @@ def remove_footers_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -137,9 +125,6 @@ def remove_headers_footers_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -153,7 +138,6 @@ def remove_headers_footers_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -186,9 +170,6 @@ def to_pdf_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -202,7 +183,6 @@ def to_pdf_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -222,9 +202,6 @@ def word_to_pdf_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -238,7 +215,6 @@ def word_to_pdf_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -258,9 +234,6 @@ def ppt_to_pdf_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -274,7 +247,6 @@ def ppt_to_pdf_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -294,9 +266,6 @@ def image_to_pdf_cmd(
         "-o",
         help="输出目录。合并模式下为单个 PDF 的所在目录",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -310,7 +279,6 @@ def image_to_pdf_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -333,9 +301,6 @@ def compress_images_cmd(
     quality: int = typer.Option(
         80, "--quality", "-q", min=1, max=100, help="JPEG 重编码质量（1-100，默认 80）"
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -349,7 +314,6 @@ def compress_images_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
         quality=quality,
     )
 
@@ -370,9 +334,6 @@ def pdf_to_word_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .docx",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -386,7 +347,6 @@ def pdf_to_word_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -406,9 +366,6 @@ def pdf_to_ppt_cmd(
         "-o",
         help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pptx",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
     recursive: bool = typer.Option(
         False,
         "--recursive",
@@ -422,7 +379,6 @@ def pdf_to_ppt_cmd(
         source_path=str(input_path),
         output_path=str(output) if output else "",
         recursive=recursive,
-        dry_run=dry_run,
     )
 
 
@@ -439,16 +395,12 @@ def pdf_to_images_cmd(
     output: Path | None = typer.Option(
         None, "--output", "-o", help="输出目录。默认生成 {stem}_images"
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
 ) -> None:
     """把 PDF 的每一页转成一张 PNG 图片。"""
     _run_operation_report(
         "pdf-to-images",
         source_path=str(input_path),
         output_path=str(output) if output else "",
-        dry_run=dry_run,
     )
 
 
@@ -465,16 +417,12 @@ def merge_pdf_cmd(
     output: Path = typer.Option(
         ..., "--output", "-o", help="合并后的输出 PDF 文件路径"
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
 ) -> None:
     """把多个 PDF 按顺序合并为一个。"""
     _run_operation_report(
         "merge-pdf",
         source_path="",
         output_path=str(output),
-        dry_run=dry_run,
         sources=[str(f) for f in files],
     )
 
@@ -495,15 +443,11 @@ def split_pdf_cmd(
     ranges: str = typer.Option(
         "", "--ranges", help='页码范围，如 "1-3,5,8-12"；留空则每页一个文件'
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="只打印将要执行的操作，不写入文件"
-    ),
 ) -> None:
     """把 PDF 拆分成多个文件（每页一个，或按页码范围）。"""
     _run_operation_report(
         "split-pdf",
         source_path=str(input_path),
         output_path=str(output) if output else "",
-        dry_run=dry_run,
         page_ranges=ranges,
     )

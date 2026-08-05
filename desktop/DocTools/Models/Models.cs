@@ -21,7 +21,6 @@ public sealed class JobRequest
     [JsonPropertyName("source_path")] public string SourcePath { get; set; } = "";
     [JsonPropertyName("output_path")] public string OutputPath { get; set; } = "";
     [JsonPropertyName("recursive")] public bool Recursive { get; set; }
-    [JsonPropertyName("dry_run")] public bool DryRun { get; set; }
     [JsonPropertyName("output_is_dir")] public bool OutputIsDir { get; set; }
     [JsonPropertyName("sources")] public List<string> Sources { get; set; } = new();
     [JsonPropertyName("page_ranges")] public string PageRanges { get; set; } = "";

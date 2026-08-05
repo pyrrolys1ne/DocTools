@@ -122,13 +122,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set { _isRecursive = value; OnPropertyChanged(); }
     }
 
-    private bool _isDryRun;
-    public bool IsDryRun
-    {
-        get => _isDryRun;
-        set { _isDryRun = value; OnPropertyChanged(); }
-    }
-
     private int _quality = 80;
     public int Quality
     {
@@ -293,7 +286,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 request.SourcePath = SourcePath.Trim();
                 request.OutputPath = OutputPath.Trim();
                 request.Recursive = IsRecursive;
-                request.DryRun = IsDryRun;
                 request.Quality = Quality;
                 break;
             case OperationKind.Merge:
