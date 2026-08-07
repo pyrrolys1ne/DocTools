@@ -41,9 +41,12 @@ DocTools/
 ├── desktop/                       # 桌面客户端（C# / .NET 8 / WPF，Windows）
 │   └── DocTools/
 │       ├── App.xaml(.cs)          # 启动：拉起 docserver.exe，退出时关闭
-│       ├── MainWindow.xaml(.cs)   # 主窗口（操作列表 + 表单 + 进度 + 结果表）
+│       ├── MainWindow.xaml(.cs)   # 主窗口（操作分组导航 + 表单 + 进度 + 结果表）
+│       ├── Converters/            # XAML 值转换器（图标几何等）
+│       ├── Themes/                # 浅色/深色配色 + 控件样式资源字典（可切换主题）
+│       ├── Views/                 # 操作表单 / 结果面板 / 运行状态子控件
 │       ├── Models/                # JobRequest / JobStatus / FileResult / 操作定义
-│       ├── Services/              # DocServer（子进程管理）/ DocToolsApi（HTTP）/ JobWatcher（WS+轮询）
+│       ├── Services/              # DocServer（子进程管理）/ DocToolsApi（HTTP）/ JobWatcher（WS+轮询）/ AppSettings（设置持久化）/ ThemeManager（主题切换）
 │       └── ViewModels/            # MainViewModel / RelayCommand
 ├── packaging/                     # 打包与分发脚本
 │   ├── docserver_entry.py         # PyInstaller 入口（复用 web/__main__.main）
@@ -52,7 +55,7 @@ DocTools/
 │   ├── build_client.ps1           # dotnet publish 桌面客户端
 │   ├── package.ps1                # 组装 DocTools-win-x64.zip
 │   └── README.txt                 # 随分发包的使用说明
-├── frontend/                      # 旧 React 前端（已归档，tag archive/frontend-v0.3）
+├── frontend/                      # React UI 原型（仅开发探索，不随分发包分发）
 ├── tests/
 ├── ARCHITECTURE.md
 └── pyproject.toml
@@ -100,15 +103,18 @@ def run_operation(operation, *, source_path, output_path, …, on_progress) -> l
 
 C/S 形态：客户端只负责交互，处理全部由本地 API 服务完成。
 
-- **服务生命周期**（`Services/DocServer.cs`）：启动时在应用目录下查找
-  `docserver\docserver.exe`（或同目录 `docserver.exe`），以 `--port 0` 拉起，
-  从 stdout 读取 `DOCSERVER_PORT=<port>` 确定实际端口；应用退出时 `Kill` 子进程。
+- **服务生命周期**（`Services/DocServer.cs`）：启动时在多个候选位置查找
+  `docserver\docserver.exe`（或同目录 `docserver.exe`；开发运行时还支持向上回溯仓库
+  `dist\docserver\`），以 `--port 0` 拉起，从 stdout 读取
+  `DOCSERVER_PORT=<port>` 确定实际端口；应用退出时 `Kill` 子进程。
 - **API 客户端**（`Services/DocToolsApi.cs`）：REST 创建/查询任务；
   **进度订阅**（`Services/JobWatcher.cs`）优先 WebSocket，失败回退 500ms 轮询。
 - **表单模型**：12 个操作（后端 13 个中除遗留 `to-pdf`），批量操作复用统一表单，
   合并 / 拆分 / PDF 转图片用专用表单；路径选择用系统原生对话框。
 - **任务状态**：`MainViewModel` 维护 `idle / running / done / failed` 状态机，
   进度条按 `done/total` 推进，结果表逐文件展示 OK/FAIL。
+- **主题与设置**（`Services/ThemeManager.cs` / `AppSettings.cs`）：浅色/深色主题切换
+  （默认跟随系统），主题与各操作最近路径持久化到 `%AppData%\DocTools\settings.json`。
 
 ## 4. Web 后端（web/，开发调试）
 
@@ -160,11 +166,13 @@ C/S 形态：客户端只负责交互，处理全部由本地 API 服务完成�
 `explore` 端点保留给 Web 调试场景。若将来演变成线上 BS（文件上传 + 对象存储），
 再切换到文件上传模型即可（见 §8）。
 
-## 5. 前端（frontend/，已归档）
+## 5. 前端（frontend/，仅开发原型）
 
 - 技术栈：React + Vite + TypeScript，Tailwind CSS v4 + shadcn/ui。
-- 已随 C/S 化归档，tag `archive/frontend-v0.3`；源码保留但不构建、不随后端托管。
-- 历史结构备忘：`App.tsx` 薄壳 + `config/operations.ts` 操作注册表 + `hooks/`
+- 保留作开发期 UI 原型探索：`?variant=` 参数切换多套布局（workspace / rail / focus），
+  `PrototypeSwitcher` 仅在 DEV 模式渲染，生产构建不包含；不随 Windows 分发包分发、不随后端托管。
+- 历史归档见 tag `archive/frontend-v0.3`。
+- 结构备忘：`App.tsx` 薄壳 + `config/`（`operations.ts` 操作注册表 / `ui.ts` 布局变体）+ `hooks/`
   （`useJob` WS+轮询回退）、`pages/` 每功能一页、`api.ts`（`VITE_API_BASE` 可配）。
 
 ## 6. 打包与分发（packaging/）

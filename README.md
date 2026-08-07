@@ -124,7 +124,7 @@ doctools split-pdf 文档.pdf -o ./拆分结果 --ranges "1-3,5,8-12"
 
 ## 桌面客户端使用
 
-桌面客户端是 C/S 形态：`DocTools.exe`（WPF）启动时自动拉起随包的本地 API 服务 `docserver\docserver.exe`（由 `web/` 后端用 PyInstaller 打包），处理完成后随程序退出关闭。交互模型与命令行一致：填写/浏览本地路径，不涉及文件上传。
+桌面客户端是 C/S 形态：`DocTools.exe`（WPF）启动时自动拉起随包的本地 API 服务 `docserver\docserver.exe`（由 `web/` 后端用 PyInstaller 打包），处理完成后随程序退出关闭。交互模型与命令行一致：填写/浏览本地路径，不涉及文件上传。支持浅色/深色主题切换（默认跟随系统），主题与各操作最近使用的路径会自动记住（保存在 `%AppData%\DocTools\settings.json`）。
 
 构建与打包（Windows，需 .NET 8 SDK）：
 
@@ -140,7 +140,7 @@ docserver\          本地 API 服务（PyInstaller onedir）
 README.txt          使用说明
 ```
 
-> 旧的 React 前端已归档（tag `archive/frontend-v0.3`），源码保留在 `frontend/` 但不再构建、不再随 Web 后端托管。
+> `frontend/` 下的 React 前端仅作开发期 UI 原型探索（含 `?variant=` 多布局切换，仅 DEV 模式生效），不随 Windows 发布包分发、不随 Web 后端托管。
 
 ## Web API 调试
 
