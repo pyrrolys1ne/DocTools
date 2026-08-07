@@ -142,6 +142,19 @@ README.txt          使用说明
 
 > `frontend/` 下的 React 前端仅作开发期 UI 原型探索（含 `?variant=` 多布局切换，仅 DEV 模式生效），不随 Windows 发布包分发、不随 Web 后端托管。
 
+### 发布新版本
+
+打 tag 自动触发 CI 构建并发布（tag 需 `v*` 前缀，如 `v1.0.0`）：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+`.github/workflows/package.yml` 在 `windows-latest` 上构建 docserver + WPF 客户端，组装
+`DocTools-win-x64.zip` 后自动创建 GitHub Release 并附上 zip（release notes 由提交记录自动生成）。
+正式包以 CI 产物为准；本地 `dist\` 构建仅用于发布前预演。
+
 ## Web API 调试
 
 `web/` 后端保留为个人开发调试工具：提供 `/api/v1` 接口与 `/docs` 调试文档，不托管前端。
