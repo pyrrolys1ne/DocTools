@@ -15,18 +15,13 @@ public sealed class DocServer : IDisposable
 
     public void Start()
     {
-        // 单文件发布时 AppContext.BaseDirectory 指向解压临时目录，
-        // 必须用 Environment.ProcessPath 定位真实的 exe 所在目录。
-        var exeDir = Path.GetDirectoryName(Environment.ProcessPath)
-            ?? throw new InvalidOperationException("无法确定可执行文件路径。");
-        var exe = new[]
-            {
-                Path.Combine(exeDir, "docserver", "docserver.exe"),
-                Path.Combine(exeDir, "docserver.exe"),
-            }
-            .FirstOrDefault(File.Exists)
-            ?? throw new FileNotFoundException(
-                "找不到 docserver.exe，请确认它与 DocTools.exe 位于同一目录（或 docserver\\ 子目录）。");
+        var exe = ResolveExecutablePath();
+        if (exe is null)
+        {
+            throw new FileNotFoundException(
+                "找不到 docserver.exe。发布包应包含 docserver\\docserver.exe；开发运行请先执行 packaging\\build_server.ps1。\n" +
+                $"已检查：{string.Join("；", CandidatePaths())}");
+        }
 
         var psi = new ProcessStartInfo
         {
@@ -54,6 +49,43 @@ public sealed class DocServer : IDisposable
         // stdout 读到 EOF 说明进程启动失败，把 stderr 内容带出来便于排错。
         var detail = _process.StandardError.ReadToEnd();
         throw new InvalidOperationException($"docserver 启动失败：{detail}");
+    }
+
+    private static string? ResolveExecutablePath()
+        => CandidatePaths().FirstOrDefault(File.Exists);
+
+    private static IEnumerable<string> CandidatePaths()
+    {
+        var roots = new List<string>();
+        AddRoot(roots, Path.GetDirectoryName(Environment.ProcessPath));
+        AddRoot(roots, AppContext.BaseDirectory);
+        AddRoot(roots, Directory.GetCurrentDirectory());
+
+        // 正式包：服务端与客户端同目录，或位于 docserver 子目录。
+        foreach (var root in roots)
+        {
+            yield return Path.Combine(root, "docserver", "docserver.exe");
+            yield return Path.Combine(root, "docserver.exe");
+        }
+
+        // 开发运行：dotnet run 的输出目录不包含 PyInstaller 服务端，
+        // 从输出目录向上寻找仓库 dist\\docserver\\docserver.exe。
+        foreach (var root in roots)
+        {
+            var directory = new DirectoryInfo(root);
+            for (var depth = 0; directory is not null && depth < 8; depth++, directory = directory.Parent)
+            {
+                yield return Path.Combine(directory.FullName, "dist", "docserver", "docserver.exe");
+            }
+        }
+    }
+
+    private static void AddRoot(List<string> roots, string? root)
+    {
+        if (!string.IsNullOrWhiteSpace(root) && !roots.Contains(root, StringComparer.OrdinalIgnoreCase))
+        {
+            roots.Add(root);
+        }
     }
 
     public void Dispose()

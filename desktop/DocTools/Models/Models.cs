@@ -12,7 +12,13 @@ public enum OperationKind
 }
 
 /// <summary>操作定义（与后端 OPERATION_HANDLERS 对应的 12 个操作）。</summary>
-public sealed record OperationDef(string Id, string Label, string[] Exts, OperationKind Kind);
+public sealed record OperationDef(
+    string Id,
+    string Label,
+    string[] Exts,
+    OperationKind Kind,
+    string Group,
+    string IconKey);
 
 /// <summary>POST /api/v1/jobs 请求体（字段名与后端 JobRequest 对齐）。</summary>
 public sealed class JobRequest

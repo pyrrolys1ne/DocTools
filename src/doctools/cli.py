@@ -57,7 +57,7 @@ def remove_headers_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成 *_cleaned 结果",
     ),
     recursive: bool = typer.Option(
         False,
@@ -91,7 +91,7 @@ def remove_footers_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成 *_cleaned 结果",
     ),
     recursive: bool = typer.Option(
         False,
@@ -123,7 +123,7 @@ def remove_headers_footers_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认自动生成 *_cleaned 结果",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成 *_cleaned 结果",
     ),
     recursive: bool = typer.Option(
         False,
@@ -168,7 +168,7 @@ def to_pdf_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成同名 .pdf",
     ),
     recursive: bool = typer.Option(
         False,
@@ -200,7 +200,7 @@ def word_to_pdf_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成同名 .pdf",
     ),
     recursive: bool = typer.Option(
         False,
@@ -232,7 +232,7 @@ def ppt_to_pdf_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pdf",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成同名 .pdf",
     ),
     recursive: bool = typer.Option(
         False,
@@ -264,7 +264,7 @@ def image_to_pdf_cmd(
         None,
         "--output",
         "-o",
-        help="输出目录。合并模式下为单个 PDF 的所在目录",
+        help="输出目录。默认在源路径旁生成 {stem}_images/merged.pdf",
     ),
     recursive: bool = typer.Option(
         False,
@@ -296,7 +296,7 @@ def compress_images_cmd(
         None,
         "--output",
         "-o",
-        help="输出目录。默认生成 {目录名}_compressed",
+        help="输出目录。默认在源路径旁生成 {目录名}_compressed",
     ),
     quality: int = typer.Option(
         80, "--quality", "-q", min=1, max=100, help="JPEG 重编码质量（1-100，默认 80）"
@@ -332,7 +332,7 @@ def pdf_to_word_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .docx",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成同名 .docx",
     ),
     recursive: bool = typer.Option(
         False,
@@ -364,7 +364,7 @@ def pdf_to_ppt_cmd(
         None,
         "--output",
         "-o",
-        help="单文件时指定输出文件路径；目录时指定输出目录。默认生成同名 .pptx",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成同名 .pptx",
     ),
     recursive: bool = typer.Option(
         False,
@@ -393,7 +393,7 @@ def pdf_to_images_cmd(
         help="要转图片的 PDF 文件",
     ),
     output: Path | None = typer.Option(
-        None, "--output", "-o", help="输出目录。默认生成 {stem}_images"
+        None, "--output", "-o", help="输出目录。默认在源路径旁生成 {stem}_images"
     ),
 ) -> None:
     """把 PDF 的每一页转成一张 PNG 图片。"""
@@ -438,7 +438,7 @@ def split_pdf_cmd(
         help="要拆分的 PDF 文件",
     ),
     output: Path | None = typer.Option(
-        None, "--output", "-o", help="输出目录。默认生成 {stem}_split"
+        None, "--output", "-o", help="输出目录。默认在源路径旁生成 {stem}_split"
     ),
     ranges: str = typer.Option(
         "", "--ranges", help='页码范围，如 "1-3,5,8-12"；留空则每页一个文件'

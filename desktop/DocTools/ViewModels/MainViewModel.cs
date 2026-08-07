@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Data;
 using DocTools.Models;
 using DocTools.Services;
 
@@ -10,35 +11,45 @@ public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly DocToolsApi _api;
     private readonly SynchronizationContext _ui;
+    private readonly AppSettings _settings;
     private JobWatcher? _watcher;
     private readonly HashSet<string> _seenResults = new();
 
     public IReadOnlyList<OperationDef> Operations { get; }
+    public ICollectionView OperationsView { get; }
     public ObservableCollection<FileResult> Results { get; } = new();
     public ObservableCollection<string> MergeSources { get; } = new();
 
-    public MainViewModel(DocToolsApi api)
+    public AppSettings Settings => _settings;
+
+    public MainViewModel(DocToolsApi api, AppSettings settings)
     {
         _api = api;
+        _settings = settings;
         _ui = SynchronizationContext.Current
             ?? throw new InvalidOperationException("MainViewModel 必须在 UI 线程创建。");
 
         Operations = new List<OperationDef>
         {
-            new("remove-headers", "去页眉", new[] { ".docx" }, OperationKind.Batch),
-            new("remove-footers", "去页脚", new[] { ".docx" }, OperationKind.Batch),
-            new("remove-headers-footers", "去页眉页脚", new[] { ".docx" }, OperationKind.Batch),
-            new("word-to-pdf", "Word 转 PDF", new[] { ".docx", ".doc" }, OperationKind.Batch),
-            new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch),
-            new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch),
-            new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch),
-            new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch),
-            new("compress-images", "图片压缩", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch),
-            new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages),
-            new("merge-pdf", "合并 PDF", new[] { ".pdf" }, OperationKind.Merge),
-            new("split-pdf", "拆分 PDF", new[] { ".pdf" }, OperationKind.Split),
+            new("remove-headers", "去页眉", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeaders"),
+            new("remove-footers", "去页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveFooters"),
+            new("remove-headers-footers", "去页眉页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeadersFooters"),
+            new("word-to-pdf", "Word 转 PDF", new[] { ".docx", ".doc" }, OperationKind.Batch, "Office 转换", "Icon.WordToPdf"),
+            new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch, "Office 转换", "Icon.PptToPdf"),
+            new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord"),
+            new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToPpt"),
+            new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages, "PDF 转换", "Icon.PdfToImages"),
+            new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.ImageToPdf"),
+            new("compress-images", "图片压缩", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages"),
+            new("merge-pdf", "合并 PDF", new[] { ".pdf" }, OperationKind.Merge, "PDF 工具", "Icon.MergePdf"),
+            new("split-pdf", "拆分 PDF", new[] { ".pdf" }, OperationKind.Split, "PDF 工具", "Icon.SplitPdf"),
         };
         SelectedOperation = Operations[0];
+
+        OperationsView = CollectionViewSource.GetDefaultView(Operations);
+        OperationsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(OperationDef.Group)));
+
+        Results.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ResultsCardVisible));
 
         StartCommand = new RelayCommand(Start);
         BrowseFileCommand = new RelayCommand(BrowseFile);
@@ -71,6 +82,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsSplitVisible));
             OnPropertyChanged(nameof(IsPdfToImagesVisible));
             OnPropertyChanged(nameof(IsCompressVisible));
+            ApplyRecents(value);
         }
     }
 
@@ -84,7 +96,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         "word-to-pdf" => "Word 转 PDF（需本机安装 Microsoft Office）",
         "ppt-to-pdf" => "PPT 转 PDF（需本机安装 Microsoft Office）",
         "image-to-pdf" => "目录内全部图片合成一个 PDF",
-        "pdf-to-word" => "PDF 转 Word（有损转换，扫描件效果有限）",
+        "pdf-to-word" => "PDF 转 Word",
         "pdf-to-ppt" => "PDF 每页渲染为一张幻灯片",
         "compress-images" => "JPEG 重编码，其余格式转优化 PNG",
         "pdf-to-images" => "PDF 每页导出一张 PNG",
@@ -149,6 +161,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(NotBusy));
             OnPropertyChanged(nameof(IsRunningVisible));
             OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(ResultsCardVisible));
         }
     }
 
@@ -167,7 +180,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string Error
     {
         get => _error;
-        set { _error = value; OnPropertyChanged(); }
+        set
+        {
+            _error = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasError));
+        }
     }
 
     private string _currentFile = "";
@@ -181,12 +199,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public double Progress
     {
         get => _progress;
-        set { _progress = value; OnPropertyChanged(); }
+        set
+        {
+            _progress = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ProgressPercent));
+        }
     }
+
+    public string ProgressPercent => $"{(int)Math.Round(Progress)}%";
 
     public int OkCount { get; private set; }
     public int FailCount { get; private set; }
     public string SummaryText => $"共 {Results.Count} 个结果，成功 {OkCount}，失败 {FailCount}";
+
+    public bool HasError => !string.IsNullOrEmpty(Error);
+
+    public bool ResultsCardVisible => Results.Count > 0 || Phase == "running";
+
+    private void ApplyRecents(OperationDef? op)
+    {
+        if (op is null)
+        {
+            return;
+        }
+
+        SourcePath = _settings.Sources.TryGetValue(op.Id, out var source) ? source : "";
+        OutputPath = _settings.Outputs.TryGetValue(op.Id, out var output) ? output : "";
+    }
 
     // ---- 命令 ----
 
@@ -320,6 +360,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 request.OutputPath = OutputPath.Trim();
                 break;
         }
+
+        _settings.Sources[operation.Id] = SourcePath.Trim();
+        _settings.Outputs[operation.Id] = OutputPath.Trim();
+        _settings.Save();
 
         Results.Clear();
         _seenResults.Clear();

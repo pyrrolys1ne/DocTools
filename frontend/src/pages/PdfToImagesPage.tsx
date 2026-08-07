@@ -6,16 +6,19 @@ import { Input } from "@/components/ui/input";
 import { ErrorBanner, Field } from "@/components/form";
 import { usePicker } from "@/hooks/usePicker";
 import { useRecents } from "@/hooks/useRecents";
+import type { UiVariant } from "@/config/ui";
+import { cn } from "@/lib/utils";
 
 import type { CreateJobParams } from "../types";
 
 interface Props {
   busy: boolean;
   onStart: (params: CreateJobParams) => void;
+  variant: UiVariant;
 }
 
 /** PDF 转图片：单个 PDF，每页导出一张 PNG。 */
-export default function PdfToImagesPage({ busy, onStart }: Props) {
+export default function PdfToImagesPage({ busy, onStart, variant }: Props) {
   const { recents, remember } = useRecents();
   const picker = usePicker();
   const [source, setSource] = useState("");
@@ -47,10 +50,18 @@ export default function PdfToImagesPage({ busy, onStart }: Props) {
   };
 
   return (
-    <Card className="mt-4">
-      <CardContent className="space-y-4 pt-6">
+    <Card className={cn("operation-form-card operation-form-special mt-4", `operation-form-${variant}`)}>
+      <CardContent
+        className={cn(
+          "operation-form-content space-y-5 pt-6",
+          variant === "workspace" &&
+            "lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)] lg:gap-x-8 lg:gap-y-5 lg:space-y-0",
+          variant === "rail" &&
+            "lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_190px] lg:items-end lg:gap-x-5 lg:gap-y-5 lg:space-y-0",
+        )}
+      >
         <Field label="源文件">
-          <div className="flex gap-2">
+          <div className="file-picker-row flex gap-2 rounded-[12px]">
             <Input
               value={source}
               onChange={(e) => setSource(e.target.value)}
@@ -74,8 +85,8 @@ export default function PdfToImagesPage({ busy, onStart }: Props) {
             </Button>
           </div>
         </Field>
-        <Field label="输出目录">
-          <div className="flex gap-2">
+        <Field label="输出目录（可选，默认生成在源路径旁）">
+          <div className="file-picker-row flex gap-2 rounded-[12px]">
             <Input
               value={outDir}
               onChange={(e) => setOutDir(e.target.value)}

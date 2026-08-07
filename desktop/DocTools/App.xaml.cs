@@ -7,10 +7,14 @@ namespace DocTools;
 public partial class App : Application
 {
     private DocServer? _server;
+    private AppSettings? _settings;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var settings = AppSettings.Load();
+        _settings = settings;
+        ThemeManager.Init(settings.Theme);
         try
         {
             // 拉起随包分发的本地 API 服务，客户端与后端通过 localhost HTTP 通信。
@@ -28,7 +32,7 @@ public partial class App : Application
             return;
         }
 
-        var viewModel = new MainViewModel(new DocToolsApi(_server.BaseUrl));
+        var viewModel = new MainViewModel(new DocToolsApi(_server.BaseUrl), settings);
         var window = new MainWindow { DataContext = viewModel };
         MainWindow = window;
         window.Show();
@@ -36,6 +40,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _settings?.Save();
         _server?.Dispose();
         base.OnExit(e);
     }

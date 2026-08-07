@@ -25,7 +25,7 @@
   --border: oklch(0.92 0.008 240);
   --input: oklch(0.88 0.01 240);
   --ring: oklch(0.68 0.15 260);
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -106,5 +106,138 @@
   /* 数字等宽对齐 */
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .ui-shell {
+    width: min(100% - 48px, 1160px);
+    margin-inline: auto;
+    padding-block: 32px 80px;
+  }
+
+  .ui-variant-rail {
+    width: min(100% - 48px, 1320px);
+  }
+
+  .ui-variant-focus {
+    width: min(100% - 40px, 920px);
+  }
+
+  .ui-app-header {
+    min-height: 64px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .operation-header {
+    margin-top: 24px;
+    padding-block: 4px 12px;
+  }
+
+  .home-page {
+    margin-top: 28px;
+  }
+
+  .home-operation-grid button {
+    min-height: 92px;
+    border-radius: 14px;
+  }
+
+  .operation-form-card {
+    border-radius: 14px;
+    box-shadow: 0 12px 30px color-mix(in oklch, var(--foreground) 7%, transparent);
+  }
+
+  .operation-form-card .file-picker-row {
+    border: 1px solid var(--border);
+    background: color-mix(in oklch, var(--muted) 48%, transparent);
+    padding: 8px;
+  }
+
+  .operation-form-workspace .operation-form-content > :first-child,
+  .operation-form-rail .operation-form-content > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .operation-form-workspace .operation-form-content > :nth-child(2) {
+    grid-row: span 2;
+  }
+
+  .operation-form-special.operation-form-workspace .operation-form-content > :first-child {
+    grid-row: span 2;
+  }
+
+  .operation-form-rail .operation-form-content > :nth-child(2) .file-picker-row,
+  .operation-form-rail .operation-form-content > :nth-child(3) .file-picker-row {
+    flex-direction: column;
+  }
+
+  .operation-form-focus .file-picker-row {
+    flex-direction: column;
+  }
+
+  .prototype-switcher {
+    position: fixed;
+    right: 24px;
+    bottom: 20px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
+    border-radius: 14px;
+    background: var(--foreground);
+    color: var(--background);
+    box-shadow: 0 10px 24px color-mix(in oklch, var(--foreground) 22%, transparent);
+  }
+
+  .prototype-switcher button {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: 9px;
+    color: inherit;
+  }
+
+  .prototype-switcher button:hover {
+    background: color-mix(in oklch, var(--background) 16%, transparent);
+  }
+
+  .prototype-switcher span {
+    display: grid;
+    min-width: 148px;
+    gap: 1px;
+    padding-inline: 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .prototype-switcher small {
+    color: color-mix(in oklch, var(--background) 62%, transparent);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+}
+
+@media (max-width: 720px) {
+  .ui-shell,
+  .ui-variant-rail,
+  .ui-variant-focus {
+    width: min(100% - 28px, 1160px);
+    padding-block: 20px 88px;
+  }
+
+  .ui-app-header {
+    padding-bottom: 18px;
+  }
+
+  .prototype-switcher {
+    right: 14px;
+    bottom: 14px;
   }
 }

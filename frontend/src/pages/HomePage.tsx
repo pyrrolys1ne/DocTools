@@ -1,14 +1,27 @@
 import { ChevronRight } from "lucide-react";
 
 import { OPERATIONS_META, type Operation } from "@/config/operations";
+import type { UiVariant } from "@/config/ui";
 import { cn } from "@/lib/utils";
 
 /** 首页：功能宫格，每个功能一个小方块，点开进入对应页面。 */
-export default function HomePage({ onOpen }: { onOpen: (op: Operation) => void }) {
+export default function HomePage({
+  onOpen,
+  variant,
+}: {
+  onOpen: (op: Operation) => void;
+  variant: UiVariant;
+}) {
   return (
-    <section className="mt-6">
+    <section className={cn("home-page", `home-page-${variant}`)}>
       <p className="mb-3 text-sm text-muted-foreground">选择一个功能开始：</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div
+        className={cn(
+          "home-operation-grid grid grid-cols-1 gap-3 sm:grid-cols-2",
+          variant === "workspace" && "lg:grid-cols-3",
+          variant === "rail" && "lg:grid-cols-2",
+        )}
+      >
         {OPERATIONS_META.map((m) => (
           <button
             key={m.op}

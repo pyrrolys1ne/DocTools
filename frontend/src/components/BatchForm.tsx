@@ -8,6 +8,7 @@ import {
   type BatchOp,
   type Scope,
 } from "@/config/operations";
+import type { UiVariant } from "@/config/ui";
 import { cn } from "@/lib/utils";
 
 import { CheckOption, Field, Segmented } from "./form";
@@ -31,6 +32,7 @@ interface BatchFormProps {
   busy: boolean;
   onBrowseSource: () => void;
   onBrowseOutput: () => void;
+  variant: UiVariant;
 }
 
 /** 批量处理表单：源路径（目录/单文件）+ 输出目录 + 递归 + 压缩质量。 */
@@ -54,11 +56,20 @@ export default function BatchForm(props: BatchFormProps) {
     busy,
     onBrowseSource,
     onBrowseOutput,
+    variant,
   } = props;
 
   return (
-    <Card>
-      <CardContent className="space-y-4 pt-6">
+    <Card className={cn("operation-form-card", `operation-form-${variant}`)}>
+      <CardContent
+        className={cn(
+          "operation-form-content space-y-5 pt-6",
+          variant === "workspace" &&
+            "lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)] lg:gap-x-8 lg:gap-y-5 lg:space-y-0",
+          variant === "rail" &&
+            "lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_190px] lg:items-end lg:gap-x-5 lg:gap-y-5 lg:space-y-0",
+        )}
+      >
         {/* 目录批量 / 单个文件 */}
         <Segmented
           options={[
@@ -72,7 +83,9 @@ export default function BatchForm(props: BatchFormProps) {
         <Field label={scope === "dir" ? "源目录" : "源文件"}>
           <div
             className={cn(
-              "flex gap-2 rounded-md transition-shadow",
+              "file-picker-row flex gap-2 rounded-[12px] transition-shadow",
+              variant === "workspace" && "lg:min-h-40 lg:flex-col lg:justify-end lg:p-4",
+              variant === "rail" && "lg:flex-col",
               scope === "file" && dragOver && "ring-2 ring-ring",
             )}
             onDragOver={(e) => {
@@ -95,7 +108,7 @@ export default function BatchForm(props: BatchFormProps) {
           </div>
         </Field>
 
-        <Field label="输出目录">
+        <Field label="输出目录（可选，默认生成在源路径旁）">
           <div className="flex gap-2">
             <Input
               value={output}

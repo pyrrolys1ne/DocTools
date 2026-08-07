@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { ErrorBanner } from "@/components/form";
 import { DoneCard, FailedCard, ProgressCard } from "@/components/JobStatus";
 import { OperationHeader } from "@/components/OperationHeader";
+import { PrototypeSwitcher } from "@/components/PrototypeSwitcher";
+import { isUiVariant, type UiVariant } from "@/config/ui";
 import type { View } from "@/config/operations";
 import { useJob } from "@/hooks/useJob";
 import BatchPage from "@/pages/BatchPage";
@@ -18,11 +20,21 @@ import SplitPdfPage from "@/pages/SplitPdfPage";
  */
 export default function App() {
   const [view, setView] = useState<View>("home");
+  const [variant, setVariant] = useState<UiVariant>(() => {
+    const value = new URLSearchParams(window.location.search).get("variant");
+    return isUiVariant(value) ? value : "workspace";
+  });
   const { phase, job, error, startJob, progress, busy, okCount, failCount } = useJob();
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("variant", variant);
+    window.history.replaceState(null, "", url);
+  }, [variant]);
+
   return (
-    <main className="mx-auto w-full max-w-[780px] px-4 pb-20 pt-8 sm:px-6">
-      <header className="flex items-center gap-3.5">
+    <main className={`ui-shell ui-variant-${variant}`}>
+      <header className="ui-app-header flex items-center gap-3.5">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-primary to-indigo-500 text-xl font-extrabold text-primary-foreground shadow-md">
           D
         </div>
@@ -38,19 +50,19 @@ export default function App() {
       </header>
 
       {view === "home" ? (
-        <HomePage onOpen={setView} />
+        <HomePage onOpen={setView} variant={variant} />
       ) : (
         <>
-          <OperationHeader view={view} onBack={() => setView("home")} />
+          <OperationHeader view={view} onBack={() => setView("home")} variant={variant} />
 
           {view === "merge-pdf" ? (
-            <MergePdfPage onStart={startJob} busy={busy} />
+            <MergePdfPage onStart={startJob} busy={busy} variant={variant} />
           ) : view === "split-pdf" ? (
-            <SplitPdfPage onStart={startJob} busy={busy} />
+            <SplitPdfPage onStart={startJob} busy={busy} variant={variant} />
           ) : view === "pdf-to-images" ? (
-            <PdfToImagesPage onStart={startJob} busy={busy} />
+            <PdfToImagesPage onStart={startJob} busy={busy} variant={variant} />
           ) : (
-            <BatchPage op={view} onStart={startJob} busy={busy} />
+            <BatchPage op={view} onStart={startJob} busy={busy} variant={variant} />
           )}
 
           {/* 任务层错误（创建失败等） */}
@@ -64,6 +76,7 @@ export default function App() {
           {phase === "failed" && job && <FailedCard job={job} />}
         </>
       )}
+      <PrototypeSwitcher value={variant} onChange={setVariant} />
     </main>
    );
 }

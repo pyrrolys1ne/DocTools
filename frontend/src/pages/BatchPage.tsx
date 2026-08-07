@@ -12,6 +12,8 @@ import {
 } from "@/config/operations";
 import { usePicker } from "@/hooks/usePicker";
 import { useRecents } from "@/hooks/useRecents";
+import type { UiVariant } from "@/config/ui";
+import { cn } from "@/lib/utils";
 
 import type { CreateJobParams } from "../types";
 
@@ -20,10 +22,11 @@ interface Props {
   op: BatchOp;
   busy: boolean;
   onStart: (params: CreateJobParams) => void;
+  variant: UiVariant;
 }
 
 /** 批量处理页：去页眉/去页脚、各转 PDF、图片转 PDF、图片压缩共用。 */
-export default function BatchPage({ op, busy, onStart }: Props) {
+export default function BatchPage({ op, busy, onStart, variant }: Props) {
   const { recents, remember } = useRecents();
   const picker = usePicker();
   const isRemove = op === "remove-headers";
@@ -116,7 +119,7 @@ export default function BatchPage({ op, busy, onStart }: Props) {
   };
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className={cn("operation-page mt-4 space-y-4", `operation-page-${variant}`)}>
       {isRemove && (
         <Segmented
           options={REMOVE_TARGETS.map((t) => ({ value: t, label: TARGET_LABEL[t] }))}
@@ -143,6 +146,7 @@ export default function BatchPage({ op, busy, onStart }: Props) {
         busy={busy}
         onBrowseSource={openSourcePicker}
         onBrowseOutput={openOutputPicker}
+        variant={variant}
       />
       {error && <ErrorBanner message={error} />}
       {picker.element}
