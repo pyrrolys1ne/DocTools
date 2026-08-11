@@ -12,6 +12,7 @@
   - [安装](#安装)
   - [命令行使用](#命令行使用)
   - [桌面客户端使用](#桌面客户端使用)
+    - [发布新版本](#发布新版本)
   - [Web API 调试](#web-api-调试)
   - [服务配置](#服务配置)
   - [架构](#架构)
@@ -193,6 +194,7 @@ API 统一挂在 `/api/v1` 前缀下；健康检查为 `GET /api/health`。
 pytest                      # 运行后端与库测试
 ruff check .                # 代码检查
 dotnet build desktop\DocTools\DocTools.csproj   # 桌面客户端编译检查
+dotnet run --project desktop\DocTools\DocTools.csproj  #  桌面客户端UI预览
 ```
 
 ## 路线图

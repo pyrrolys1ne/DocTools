@@ -1,0 +1,12 @@
+*** Begin Patch
+*** Update File: desktop/DocTools/DocTools.csproj
+@@
+     <Version>1.0.0</Version>
+   </PropertyGroup>
+ 
++  <ItemGroup>
++    <Resource Include="Assets\icon.png"/>
++  </ItemGroup>
++
+ </Project>
+*** End Patch

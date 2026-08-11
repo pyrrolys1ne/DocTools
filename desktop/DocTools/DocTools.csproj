@@ -11,7 +11,12 @@
     <!-- 单文件发布：WPF 依赖原生库，必须解压到临时目录，否则启动即 DllNotFoundException -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Version>1.0.1</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\icon.png"/>
+  </ItemGroup>
 
 </Project>

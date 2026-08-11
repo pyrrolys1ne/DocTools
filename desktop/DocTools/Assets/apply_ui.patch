@@ -1,0 +1,7 @@
+*** Begin Patch
+*** Update File: desktop/DocTools/MainWindow.xaml
+@@
+-                <Path Data="{StaticResource Icon.App}" Fill="{DynamicResource Brush.Primary}"
+-                      Width="18" Height="18" Stretch="Uniform"/>
++                <Image Source="Assets/icon.png" Width="18" Height="18"/>
+*** End Patch

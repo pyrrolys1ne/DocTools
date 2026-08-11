@@ -28,7 +28,7 @@
 
         <Grid Grid.Row="0" Background="{DynamicResource Brush.TitleBar}">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                <Image Source="/icon.png" Width="18" Height="18"/>
+                <Image Source="Assets/icon.png" Width="18" Height="18"/>
                 <TextBlock Text="DocTools" Margin="9,0,0,0" FontSize="13" FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center"/>
             </StackPanel>
