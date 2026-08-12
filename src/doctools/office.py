@@ -52,8 +52,8 @@ class OfficeConverter:
             self._app("Word")
         except Exception as exc:  # noqa: BLE001 - 转为清晰的中文提示
             raise RuntimeError(
-                "未能启动 Microsoft Word。转 PDF 需要本机安装 Microsoft Office，"
-                "并安装依赖：pip install \"doctools[office]\""
+                f"未能启动 Microsoft Word。转 PDF 需要本机安装 Microsoft Office，"
+                f"并安装依赖：pip install \"doctools[office]\"。\n底层错误：{exc}"
             ) from exc
 
     def _retry(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -74,7 +74,7 @@ class OfficeConverter:
         if name not in self._apps:
             # 用 EnsureDispatch 生成类型库包装，避免动态分发导致
             # Word 的 Document.Close 等方法出现不可预期的 AttributeError。
-            app = self._retry(self._win32com.gencache.EnsureDispatch, f"{name}.Application")
+            app = self._ensure_dispatch(name)
             app.DisplayAlerts = False
             if hasattr(app, "Visible"):
                 try:
@@ -83,6 +83,38 @@ class OfficeConverter:
                     pass
             self._apps[name] = app
         return self._apps[name]
+
+    def _ensure_dispatch(self, name: str) -> Any:
+        """EnsureDispatch，并对损坏的 win32com.gen_py 缓存自愈。
+
+        gen_py 类型库缓存若在生成中途被中断（如桌面端退出、杀进程），会残留
+        半成品模块，导致 EnsureDispatch 抛 AttributeError（典型报错
+        ``no attribute 'CLSIDToClassMap'``）。此时重建缓存后重试一次。
+        """
+        try:
+            return self._retry(self._win32com.gencache.EnsureDispatch, f"{name}.Application")
+        except (AttributeError, ImportError, SyntaxError):
+            # gen_py 缓存损坏：清掉磁盘缓存与进程内已导入的损坏模块，
+            # 下次 EnsureDispatch 会按需重建（自动重新生成 Word typelib）。
+            self._repair_gen_py_cache()
+            return self._retry(self._win32com.gencache.EnsureDispatch, f"{name}.Application")
+
+
+    def _repair_gen_py_cache(self) -> None:
+        """删除损坏的 win32com.gen_py 类型库缓存（磁盘 + 已导入模块）。
+
+        缓存若在生成中途被中断（桌面端退出/杀进程），会残留半成品模块，
+        表现为 EnsureDispatch 抛 ``no attribute 'CLSIDToClassMap'`` 等错误。
+        删除后由 win32com 按需重建，避免把锅误判成“没装 Office”。
+        """
+        import shutil  # noqa: PLC0415
+        import sys as _sys  # noqa: PLC0415
+
+        for mod_name in [m for m in _sys.modules if m.startswith("win32com.gen_py.")]:
+            _sys.modules.pop(mod_name, None)
+        gen_dir = self._win32com.gencache.GetGeneratePath()
+        shutil.rmtree(gen_dir, ignore_errors=True)
+
 
     def convert(self, src: Path, dst: Path) -> None:
         """把单个 Office 文件转成 PDF。``src`` 后缀决定用哪个应用。"""
