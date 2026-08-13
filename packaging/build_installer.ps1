@@ -1,4 +1,4 @@
-﻿# 构建 DocTools 安装器（Inno Setup 6）。依赖 dist\DocTools-win-x64（package.ps1 产物）。
+# 构建 DocTools 安装器（Inno Setup 6）。依赖 dist\DocTools-win-x64（package.ps1 产物）。
 # 用法：.\packaging\build_installer.ps1            # 先 package.ps1 再编译安装器
 #       .\packaging\build_installer.ps1 -SkipBuild  # 仅用现有构建产物
 # 未安装 Inno Setup 时：winget install JRSoftware.InnoSetup
@@ -17,8 +17,13 @@ if (-not $SkipBuild) {
 }
 
 if (-not $Iscc) {
+    # choco 安装会创建 PATH shim（C:\ProgramData\chocolatey\bin\ISCC.exe），优先命中
+    $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if ($cmd) { $Iscc = $cmd.Source }
+}
+if (-not $Iscc) {
     $candidates = @(
-        "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
     )
     $Iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
