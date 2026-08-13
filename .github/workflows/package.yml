@@ -28,14 +28,26 @@ jobs:
       # 打包产物冒烟：启动 docserver，真实跑一次 pdf-to-word 并校验输出
       - name: Smoke test packaged docserver
         run: .\packaging\smoke_test.ps1 -DocServer dist\docserver\docserver.exe -Python python
+      # 安装器（Inno Setup）：DocTools-Setup-{version}-x64.exe
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        run: .\packaging\build_installer.ps1 -SkipBuild
       # 手动触发（workflow_dispatch，无 tag）时仅上传 artifact，不创建 Release
       - uses: actions/upload-artifact@v4
         with:
           name: DocTools-win-x64
           path: dist/DocTools-win-x64.zip
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocTools-Setup
+          path: dist/DocTools-Setup-*.exe
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/DocTools-win-x64.zip
+          files: |
+            dist/DocTools-win-x64.zip
+            dist/DocTools-Setup-*.exe
           generate_release_notes: true
