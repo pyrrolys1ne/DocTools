@@ -11,6 +11,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+from doctools.errors import (
+    OFFICE_CONVERT_FAILED,
+    OFFICE_NOT_INSTALLED,
+    UNSUPPORTED_FORMAT,
+    DoctoolsError,
+)
+
 # 文件后缀 → 需要的 Office 应用
 _APP_BY_SUFFIX = {
     ".doc": "Word",
@@ -51,9 +58,10 @@ class OfficeConverter:
             # 启动校验：确认本机装了对应用户要用的 Office 组件
             self._app("Word")
         except Exception as exc:  # noqa: BLE001 - 转为清晰的中文提示
-            raise RuntimeError(
-                f"未能启动 Microsoft Word。转 PDF 需要本机安装 Microsoft Office，"
-                f"并安装依赖：pip install \"doctools[office]\"。\n底层错误：{exc}"
+            raise DoctoolsError(
+                OFFICE_NOT_INSTALLED,
+                "未能启动 Microsoft Word。转 PDF 需要本机安装 Microsoft Office，"
+                f"并安装依赖：pip install \"doctools[office]\"。\n底层错误：{exc}",
             ) from exc
 
     def _retry(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -121,24 +129,37 @@ class OfficeConverter:
         suffix = src.suffix.lower()
         app_name = _APP_BY_SUFFIX.get(suffix)
         if app_name is None:
-            raise ValueError(f"不支持的 Office 格式：{src}")
+            raise DoctoolsError(
+                UNSUPPORTED_FORMAT,
+                f"不支持的 Office 格式：{src}",
+                f"Unsupported Office format: {src}",
+            )
         app = self._app(app_name)
         src_abs = str(src.resolve())
         dst_abs = str(dst.resolve())
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        if app_name == "Word":
-            doc = self._retry(app.Documents.Open, src_abs, ReadOnly=True)
-            try:
-                self._retry(doc.ExportAsFixedFormat, dst_abs, _WD_EXPORT_PDF)
-            finally:
-                self._retry(doc.Close, False)
-        else:
-            pres = self._retry(app.Presentations.Open, src_abs, ReadOnly=True, WithWindow=False)
-            try:
-                self._retry(pres.SaveAs, dst_abs, _PP_SAVE_AS_PDF)
-            finally:
-                self._retry(pres.Close)
+        try:
+            if app_name == "Word":
+                doc = self._retry(app.Documents.Open, src_abs, ReadOnly=True)
+                try:
+                    self._retry(doc.ExportAsFixedFormat, dst_abs, _WD_EXPORT_PDF)
+                finally:
+                    self._retry(doc.Close, False)
+            else:
+                pres = self._retry(app.Presentations.Open, src_abs, ReadOnly=True, WithWindow=False)
+                try:
+                    self._retry(pres.SaveAs, dst_abs, _PP_SAVE_AS_PDF)
+                finally:
+                    self._retry(pres.Close)
+        except DoctoolsError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - 转为带稳定错误码的业务错误
+            raise DoctoolsError(
+                OFFICE_CONVERT_FAILED,
+                f"Office 转换失败：{src}\n底层错误：{exc}",
+                f"Office conversion failed: {src}",
+            ) from exc
 
     def close(self) -> None:
         """退出全部 Office 应用并做 COM 反初始化。重复调用安全。"""

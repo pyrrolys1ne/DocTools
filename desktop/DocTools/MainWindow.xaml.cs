@@ -27,6 +27,10 @@ public partial class MainWindow : Window
         ViewModel.Settings.Save();
     }
 
+    private void DiagnosticsClick(object sender, RoutedEventArgs e) => ViewModel.ExportDiagnostics();
+
+    private void CheckUpdatesClick(object sender, RoutedEventArgs e) => ViewModel.CheckForUpdates();
+
     private void OnDragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;

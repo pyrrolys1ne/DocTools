@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from web.config import API_PREFIX, cors_origin_list
-from web.routers import explore, jobs
+from web.routers import capabilities, diagnostics, explore, jobs
 
 app = FastAPI(title="DocTools Web", description="批量文档处理本地 API 服务")
 app.add_middleware(
@@ -22,6 +22,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(capabilities.router, prefix=API_PREFIX)
+app.include_router(diagnostics.router, prefix=API_PREFIX)
 app.include_router(explore.router, prefix=API_PREFIX)
 app.include_router(jobs.router, prefix=API_PREFIX)
 

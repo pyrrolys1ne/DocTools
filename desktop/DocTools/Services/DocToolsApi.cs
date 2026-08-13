@@ -29,6 +29,19 @@ public sealed class DocToolsApi
         return (await _http.GetFromJsonAsync<JobStatus>($"jobs/{jobId}", ct))!;
     }
 
+    public async Task<Capabilities> GetCapabilitiesAsync(CancellationToken ct = default)
+    {
+        return (await _http.GetFromJsonAsync<Capabilities>("capabilities", ct))!;
+    }
+
+    /// <summary>拉取诊断报告原始 JSON（版本/平台/能力/环境变量）。</summary>
+    public async Task<string> GetDiagnosticsJsonAsync(CancellationToken ct = default)
+    {
+        var resp = await _http.GetAsync("diagnostics", ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsStringAsync(ct);
+    }
+
     public Uri JobWsUri(string jobId)
     {
         var path = BaseUrl.AbsolutePath.TrimEnd('/') + $"/jobs/{jobId}/ws";

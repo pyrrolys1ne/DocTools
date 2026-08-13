@@ -7,6 +7,7 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 from doctools.model import FileResult, ProgressFn
+from doctools.resource_policy import assert_pdf_pages
 
 
 def parse_ranges(spec: str, page_count: int) -> list[tuple[int, int]]:
@@ -73,6 +74,7 @@ def merge_pdfs(
             on_progress(total, done, result)
 
     if any(r.ok for r in results):
+        assert_pdf_pages(len(writer.pages), what="合并结果")
         dst.parent.mkdir(parents=True, exist_ok=True)
         with dst.open("wb") as f:
             writer.write(f)

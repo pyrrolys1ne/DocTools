@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from doctools.docx import strip_footers, strip_headers, strip_headers_footers
+from doctools.errors import DoctoolsError
 from doctools.model import (
     CONVERT_SUFFIXES,
     IMAGE_SUFFIXES,
@@ -151,7 +152,13 @@ def process_batch(
     for done, (src, dst) in enumerate(plan, start=1):
         result = FileResult(src=src, dst=dst, ok=True)
         try:
-            worker(src, dst)
+            note = worker(src, dst)
+            if isinstance(note, str):
+                result.note = note
+        except DoctoolsError as exc:  # 结构化错误：记录稳定错误码
+            result.ok = False
+            result.error = exc.zh
+            result.code = exc.code
         except Exception as exc:  # noqa: BLE001 - 单文件失败不应中断整批
             result.ok = False
             result.error = str(exc)

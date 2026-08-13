@@ -34,7 +34,13 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                <Button Style="{StaticResource TitleBarButton}" Click="ThemeClick">
+                <Button Style="{StaticResource TitleBarButton}" Click="CheckUpdatesClick" ToolTip="检查更新">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE896;" FontSize="12"/>
+                </Button>
+                <Button Style="{StaticResource TitleBarButton}" Click="DiagnosticsClick" ToolTip="导出诊断报告">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="12"/>
+                </Button>
+                <Button Style="{StaticResource TitleBarButton}" Click="ThemeClick" ToolTip="切换主题">
                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE706;" FontSize="12"/>
                 </Button>
                 <Button Style="{StaticResource TitleBarButton}" Click="MinimizeClick">
@@ -76,7 +82,15 @@
                             </GroupStyle>
                         </ListBox.GroupStyle>
                         <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource NavItem}"/>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource NavItem}">
+                                <Style.Triggers>
+                                    <!-- 依赖引擎不可用时禁用该操作（能力清单来自 /api/v1/capabilities） -->
+                                    <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                        <Setter Property="Opacity" Value="0.45"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>

@@ -18,13 +18,16 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install Python deps
-        run: pip install -e ".[web]" pyinstaller
+        run: pip install -e ".[web,office]" pyinstaller
       - name: Build docserver (PyInstaller)
         run: .\packaging\build_server.ps1
       - name: Build WPF client (dotnet publish)
         run: .\packaging\build_client.ps1
       - name: Assemble zip
         run: .\packaging\package.ps1 -SkipBuild
+      # 打包产物冒烟：启动 docserver，真实跑一次 pdf-to-word 并校验输出
+      - name: Smoke test packaged docserver
+        run: .\packaging\smoke_test.ps1 -DocServer dist\docserver\docserver.exe -Python python
       # 手动触发（workflow_dispatch，无 tag）时仅上传 artifact，不创建 Release
       - uses: actions/upload-artifact@v4
         with:

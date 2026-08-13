@@ -36,6 +36,10 @@ public partial class App : Application
         var window = new MainWindow { DataContext = viewModel };
         MainWindow = window;
         window.Show();
+        // 后台拉取引擎能力清单（office 等），据此禁用不可用操作；失败不打扰
+        _ = viewModel.LoadCapabilitiesAsync();
+        // 启动静默检查更新（受设置 CheckForUpdates 控制）
+        _ = viewModel.CheckForUpdatesSilentlyAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -44,7 +44,14 @@ class Job:
             "current": self.current,
             "error": self.error,
             "results": [
-                {"src": str(r.src), "dst": str(r.dst), "ok": r.ok, "error": r.error}
+                {
+                    "src": str(r.src),
+                    "dst": str(r.dst),
+                    "ok": r.ok,
+                    "error": r.error,
+                    "error_code": r.code,
+                    "note": r.note,
+                }
                 for r in self.results
             ],
         }

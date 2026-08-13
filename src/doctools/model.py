@@ -15,6 +15,10 @@ class FileResult:
     dst: Path
     ok: bool
     error: str | None = None
+    # 稳定错误码（见 doctools.errors）；失败时可能为 None（非结构化异常）
+    code: str | None = None
+    # 附注（如"已回退为文字提取"），成功/失败均可携带
+    note: str | None = None
 
 
 ProgressFn = Callable[[int, int, FileResult], None]

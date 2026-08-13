@@ -6,4 +6,4 @@
 - merge-pdf / split-pdf：PDF 合并与拆分
 """
 
-__version__ = "0.3.0"
+__version__ = "1.2.0"

@@ -8,6 +8,9 @@ public sealed class AppSettings
 {
     public string Theme { get; set; } = "";
 
+    /// <summary>启动时静默检查更新（默认开；手动"检查更新"按钮不受此开关限制）。</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
     public Dictionary<string, string> Sources { get; set; } = new();
 
     public Dictionary<string, string> Outputs { get; set; } = new();

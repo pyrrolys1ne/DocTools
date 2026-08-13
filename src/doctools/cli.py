@@ -38,9 +38,11 @@ def main(
 
 def _report(_total: int, _done: int, result: FileResult) -> None:
     if result.ok:
-        typer.echo(f"[OK] {result.src} -> {result.dst}")
+        suffix = f"（{result.note}）" if result.note else ""
+        typer.echo(f"[OK] {result.src} -> {result.dst}{suffix}")
     else:
-        typer.echo(f"[FAIL] 处理失败 {result.src}: {result.error}", err=True)
+        code = f"[{result.code}] " if result.code else ""
+        typer.echo(f"[FAIL] 处理失败 {result.src}: {code}{result.error}", err=True)
 
 
 @app.command("remove-headers")
@@ -147,9 +149,6 @@ def _run_operation_report(operation: str, **kwargs) -> None:
         results = run_operation(operation, on_progress=_report, **kwargs)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-    for result in results:
-        if not result.ok:
-            typer.echo(f"[FAIL] {result.src}: {result.error}", err=True)
     if any(not r.ok for r in results):
         raise typer.Exit(1)
 

@@ -6,7 +6,9 @@ from pathlib import Path
 
 from PIL import Image
 
+from doctools.errors import DoctoolsError
 from doctools.model import FileResult, ProgressFn
+from doctools.resource_policy import assert_image_to_pdf_budget
 
 
 def compress_image(src: Path, dst: Path, quality: int = 80) -> None:
@@ -36,11 +38,19 @@ def merge_images_to_pdf(
     results: list[FileResult] = []
     images: list[Image.Image] = []
     total = len(srcs)
+    used_pixels = 0
     try:
         for done, src in enumerate(srcs, start=1):
             result = FileResult(src=src, dst=dst, ok=True)
             try:
-                images.append(Image.open(str(src)))
+                img = Image.open(str(src))
+                # 累计解码预算：超限整个操作失败（fail closed，参照飞鼠）
+                used_pixels = assert_image_to_pdf_budget(img.width, img.height, used_pixels)
+                images.append(img)
+            except DoctoolsError:
+                for img in images:
+                    img.close()
+                raise
             except Exception as exc:  # noqa: BLE001 - 单张失败不应中断整批
                 result.ok = False
                 result.error = str(exc)

@@ -43,7 +43,7 @@
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Header="源文件" Binding="{Binding Src}" Width="*"/>
                     <DataGridTextColumn Header="输出" Binding="{Binding Dst}" Width="*"/>
-                    <DataGridTextColumn Header="错误" Binding="{Binding Error}" Width="2*"/>
+                    <DataGridTextColumn Header="错误" Binding="{Binding DisplayError}" Width="2*"/>
                 </DataGrid.Columns>
             </DataGrid>
         </StackPanel>

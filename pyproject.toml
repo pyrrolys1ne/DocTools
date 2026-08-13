@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doctools"
-version = "1.0.0"
+version = "1.2.0"
 description = "批量文档处理命令行工具（Word 去页眉、PDF 转 PPT 等）"
 readme = "README.md"
 requires-python = ">=3.10"

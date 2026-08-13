@@ -30,7 +30,7 @@
 | Word → PDF | `word-to-pdf` | 基于 Microsoft Office COM |
 | PPT → PDF | `ppt-to-pdf` | 同上 |
 | 图片 → PDF | `image-to-pdf` | 目录内所有图片合成一个 PDF（每张一页） |
-| PDF → Word | `pdf-to-word` | 基于 pdf2docx，有损转换 |
+| PDF → Word | `pdf-to-word` | 基于 pdf2docx，有损转换；引擎失败自动回退文字提取（扫描件需 OCR） |
 | PDF → PPT | `pdf-to-ppt` | 每页渲染为一张幻灯片 |
 | PDF → 图片 | `pdf-to-images` | 每页导出一张 PNG |
 | 图片压缩 | `compress-images` | JPEG 重编码，其余转优化 PNG，可选质量 |
@@ -40,8 +40,10 @@
 通用能力：
 
 - **递归处理**子目录（`--recursive`），输出目录镜像源目录结构；
-- **单文件失败不中断整批**，逐文件上报 OK/FAIL；
-- **Windows 桌面客户端**（WPF）：本地服务随包启动，无需安装 Python / Node；
+- **单文件失败不中断整批**，逐文件上报 OK/FAIL（带稳定错误码 `[CODE]`）；
+- **结构化错误码**：CLI / Web / 桌面端共用稳定错误码（如 `PDF_NO_TEXT`、`OFFICE_NOT_INSTALLED`、`RESOURCE_LIMIT_EXCEEDED`）；
+- **资源预算**：PDF 页数上限 1000、图片合并 100MP 像素预算等（可用 `DOCTOOLS_*` 环境变量调整）；
+- **Windows 桌面客户端**（WPF）：本地服务随包启动，无需安装 Python / Node；自动检测本机引擎能力，不可用的操作自动禁用并提示原因；支持检查更新与一键导出诊断报告。
 
 ## 环境要求
 
@@ -131,15 +133,19 @@ doctools split-pdf 文档.pdf -o ./拆分结果 --ranges "1-3,5,8-12"
 
 ```bash
 .\packaging\package.ps1          # 构建 docserver + DocTools.exe 并打包为 zip
+.\packaging\build_installer.ps1  # 额外生成 Inno Setup 安装器（需 Inno Setup 6）
+.\packaging\smoke_test.ps1       # 对打包产物做冒烟测试（真实跑一次 pdf-to-word）
 ```
 
-产物为 `dist\DocTools-win-x64.zip`，解压后运行 `DocTools.exe` 即可。目录结构：
+产物为 `dist\DocTools-win-x64.zip`（解压即用）与 `dist\DocTools-Setup-{version}-x64.exe`（安装器，含快捷方式与卸载入口），解压后运行 `DocTools.exe` 即可。目录结构：
 
 ```
 DocTools.exe        桌面客户端
 docserver\          本地 API 服务（PyInstaller onedir）
 README.txt          使用说明
 ```
+
+桌面客户端功能：启动时自动检测引擎能力（未安装 Office 时自动禁用 Word/PPT 转 PDF 并提示）；启动静默检查 GitHub Release 更新，标题栏"检查更新"按钮手动检查；标题栏"导出诊断报告"按钮一键导出版本/能力/环境诊断 JSON。
 
 > `frontend/` 下的 React 前端仅作开发期 UI 原型探索（含 `?variant=` 多布局切换，仅 DEV 模式生效），不随 Windows 发布包分发、不随 Web 后端托管。
 
@@ -177,8 +183,12 @@ Web 服务通过环境变量配置（前缀 `DOCTOOLS_`，也支持 `.env` 文�
 | `DOCTOOLS_PORT` | `8000` | 监听端口；桌面客户端传 `--port 0` 自动选端口 |
 | `DOCTOOLS_RELOAD` | `false` | 开发调试时热重载（打包环境必须关闭） |
 | `DOCTOOLS_CORS_ORIGINS` | `http://localhost:5173,…` | 浏览器跨域调试来源（逗号分隔）；桌面客户端不走 CORS |
+| `DOCTOOLS_MAX_PDF_PAGES` | `1000` | PDF 转换页数上限（超限报 `PDF_PAGE_LIMIT`） |
+| `DOCTOOLS_PDF_IMAGE_MAX_PIXELS` | `50000000` | PDF 单页渲染像素预算 |
+| `DOCTOOLS_IMAGE_TO_PDF_MAX_PIXELS` | `100000000` | 图片合并 PDF 累计解码预算 |
 
 API 统一挂在 `/api/v1` 前缀下；健康检查为 `GET /api/health`。
+辅助接口：`GET /api/v1/capabilities`（引擎能力 + 资源预算）、`GET /api/v1/diagnostics`（诊断报告）。
 
 ## 架构
 

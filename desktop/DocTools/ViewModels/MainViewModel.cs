@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Data;
 using DocTools.Models;
 using DocTools.Services;
@@ -12,6 +15,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly DocToolsApi _api;
     private readonly SynchronizationContext _ui;
     private readonly AppSettings _settings;
+    private readonly UpdateService _updater = new();
     private JobWatcher? _watcher;
     private readonly HashSet<string> _seenResults = new();
 
@@ -34,8 +38,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             new("remove-headers", "去页眉", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeaders"),
             new("remove-footers", "去页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveFooters"),
             new("remove-headers-footers", "去页眉页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeadersFooters"),
-            new("word-to-pdf", "Word 转 PDF", new[] { ".docx", ".doc" }, OperationKind.Batch, "Office 转换", "Icon.WordToPdf"),
-            new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch, "Office 转换", "Icon.PptToPdf"),
+            new("word-to-pdf", "Word 转 PDF", new[] { ".docx", ".doc" }, OperationKind.Batch, "Office 转换", "Icon.WordToPdf", requiresEngine: "office"),
+            new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch, "Office 转换", "Icon.PptToPdf", requiresEngine: "office"),
             new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord"),
             new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToPpt"),
             new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages, "PDF 转换", "Icon.PdfToImages"),
@@ -57,6 +61,37 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BrowseOutputDirCommand = new RelayCommand(BrowseOutputDir);
         BrowseMergeOutputCommand = new RelayCommand(BrowseMergeOutput);
         AddMergeFilesCommand = new RelayCommand(AddMergeFiles);
+        ExportDiagnosticsCommand = new RelayCommand(ExportDiagnostics);
+        CheckUpdatesCommand = new RelayCommand(CheckForUpdates);
+    }
+
+    // ---- 引擎能力（/api/v1/capabilities）----
+
+    /// <summary>拉取引擎能力清单并更新各操作的可用性（失败时保持默认可用，不打扰）。</summary>
+    public async Task LoadCapabilitiesAsync()
+    {
+        try
+        {
+            var caps = await _api.GetCapabilitiesAsync();
+            foreach (var op in Operations)
+            {
+                if (op.RequiresEngine is null)
+                {
+                    continue;
+                }
+
+                var available = caps.Engines.TryGetValue(op.RequiresEngine, out var ok) && ok;
+                op.IsAvailable = available;
+                op.UnavailableReason = available
+                    ? null
+                    : $"未检测到 Microsoft Office，{op.Label}不可用。请安装 Office 后重启。";
+            }
+        }
+        catch (Exception ex)
+        {
+            // 能力探测失败不影响使用：所有操作保持可用，后端会给出明确错误
+            System.Diagnostics.Debug.WriteLine($"LoadCapabilitiesAsync failed: {ex.Message}");
+        }
     }
 
     // ---- 操作选择 ----
@@ -236,6 +271,149 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public RelayCommand BrowseOutputDirCommand { get; }
     public RelayCommand BrowseMergeOutputCommand { get; }
     public RelayCommand AddMergeFilesCommand { get; }
+    public RelayCommand ExportDiagnosticsCommand { get; }
+    public RelayCommand CheckUpdatesCommand { get; }
+
+    /// <summary>手动检查更新：有新版时询问下载安装；无更新或失败时给出明确提示。</summary>
+    public async void CheckForUpdates()
+    {
+        try
+        {
+            var info = await _updater.CheckForUpdateAsync();
+            if (info is null)
+            {
+                MessageBox.Show(
+                    $"当前已是最新版本（v{_updater.CurrentVersion}）",
+                    "检查更新",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"发现新版本 v{info.Version}（当前 v{_updater.CurrentVersion}）。是否下载并安装？",
+                "检查更新",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                var cmdPath = await _updater.DownloadAndInstallAsync(info);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = cmdPath,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    UseShellExecute = true,
+                });
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"更新下载或校验失败：{ex.Message}",
+                    "检查更新",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"检查更新失败：{ex.Message}",
+                "检查更新",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>启动时静默检查更新（受设置 CheckForUpdates 控制；失败不打扰）。</summary>
+    public async Task CheckForUpdatesSilentlyAsync()
+    {
+        if (!_settings.CheckForUpdates)
+        {
+            return;
+        }
+
+        var info = await _updater.CheckForUpdateAsync();
+        if (info is null)
+        {
+            return;
+        }
+
+        _ui.Post(_ =>
+        {
+            var confirm = MessageBox.Show(
+                $"发现新版本 v{info.Version}（当前 v{_updater.CurrentVersion}）。是否现在更新？",
+                "DocTools 更新",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (confirm == MessageBoxResult.Yes)
+            {
+                _ = InstallAsync(info);
+            }
+        }, null);
+    }
+
+    private async Task InstallAsync(UpdateInfo info)
+    {
+        try
+        {
+            var cmdPath = await _updater.DownloadAndInstallAsync(info);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = cmdPath,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                UseShellExecute = true,
+            });
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"更新下载或校验失败：{ex.Message}",
+                "DocTools 更新",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>导出诊断报告：拉取 /api/v1/diagnostics 并保存为 JSON 文件。</summary>
+    public async void ExportDiagnostics()
+    {
+        try
+        {
+            var json = await _api.GetDiagnosticsJsonAsync();
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = $"DocTools-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.json",
+                Filter = "JSON 文件|*.json",
+                DefaultExt = ".json",
+            };
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            await File.WriteAllTextAsync(dialog.FileName, json);
+            MessageBox.Show(
+                $"诊断报告已保存到：{dialog.FileName}",
+                "DocTools",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"导出诊断报告失败：{ex.Message}",
+                "DocTools",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
 
     private void BrowseFile()
     {
@@ -309,6 +487,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var operation = SelectedOperation;
         if (operation is null)
         {
+            return;
+        }
+
+        if (!operation.IsAvailable)
+        {
+            Error = operation.UnavailableReason ?? $"当前环境不支持 {operation.Label}";
             return;
         }
 

@@ -39,6 +39,10 @@ class JobResult(BaseModel):
     dst: str
     ok: bool
     error: str | None = None
+    # 稳定错误码（见 doctools.errors）；失败时可能为 None（非结构化异常）
+    error_code: str | None = None
+    # 附注（如"已回退为文字提取"）
+    note: str | None = None
 
 
 class JobResponse(BaseModel):
