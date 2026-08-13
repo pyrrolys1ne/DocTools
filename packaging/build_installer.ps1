@@ -1,4 +1,4 @@
-# 构建 DocTools 安装器（Inno Setup 6）。依赖 dist\DocTools-win-x64（package.ps1 产物）。
+﻿# 构建 DocTools 安装器（Inno Setup 6）。依赖 dist\DocTools-win-x64（package.ps1 产物）。
 # 用法：.\packaging\build_installer.ps1            # 先 package.ps1 再编译安装器
 #       .\packaging\build_installer.ps1 -SkipBuild  # 仅用现有构建产物
 # 未安装 Inno Setup 时：winget install JRSoftware.InnoSetup
