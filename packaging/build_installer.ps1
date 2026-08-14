@@ -24,7 +24,9 @@ if (-not $Iscc) {
 if (-not $Iscc) {
     $candidates = @(
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        # winget 默认按用户安装到 %LOCALAPPDATA%\Programs\Inno Setup 6\
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     )
     $Iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }

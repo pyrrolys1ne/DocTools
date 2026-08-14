@@ -4,4 +4,4 @@
 MinerU 解析、PDF 合并拆分等（详见 README）。
 """
 
-__version__ = "1.3.0"
+__version__ = "1.2.1"

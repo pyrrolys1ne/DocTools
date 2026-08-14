@@ -1,4 +1,4 @@
-; DocTools 安装器（Inno Setup 6）
+﻿; DocTools 安装器（Inno Setup 6）
 ; 构建入口：packaging\build_installer.ps1（自动传递 /DSourceDir /DOutputDir /DAppVersion）
 ; 手动编译示例：
 ;   ISCC.exe packaging\installer.iss /DSourceDir=dist\DocTools-win-x64 /DOutputDir=dist /DAppVersion=1.1.0

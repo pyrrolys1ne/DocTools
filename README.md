@@ -4,16 +4,19 @@
 
 ## 目录
 
-- [功能特性](#功能特性)
-- [环境要求](#环境要求)
-- [安装](#安装)
-- [命令行使用](#命令行使用)
-- [桌面客户端使用](#桌面客户端使用)
-- [Web API 调试](#web-api-调试)
-- [服务配置](#服务配置)
-- [架构](#架构)
-- [开发](#开发)
-- [许可](#许可)
+- [DocTools](#doctools)
+  - [目录](#目录)
+  - [功能特性](#功能特性)
+  - [环境要求](#环境要求)
+  - [安装](#安装)
+  - [命令行使用](#命令行使用)
+  - [桌面客户端使用](#桌面客户端使用)
+    - [发布新版本](#发布新版本)
+  - [Web API 调试](#web-api-调试)
+  - [服务配置](#服务配置)
+  - [架构](#架构)
+  - [开发](#开发)
+  - [许可](#许可)
 
 ## 功能特性
 
@@ -147,7 +150,7 @@ doctools split-pdf 文档.pdf -o ./拆分结果 --ranges "1-3,5,8-12"
 
 ```bash
 .\packaging\package.ps1            # 构建 docserver + DocTools.exe 并打包为 zip
-.\packaging\build_installer.ps1    # 额外生成 Inno Setup 安装器（需 Inno Setup 6）
+.\packaging\build_installer.ps1 -SkipBuild   # 额外生成 Inno Setup 安装器（需 Inno Setup 6）
 .\packaging\smoke_test.ps1         # 对打包产物做冒烟测试（真实跑一次 pdf-to-word）
 .\packaging\download_libreoffice.ps1 -Url <paf.exe>  # 下载便携版 LibreOffice 作兜底引擎
 ```
