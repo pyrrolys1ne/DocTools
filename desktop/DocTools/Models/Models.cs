@@ -11,6 +11,7 @@ public enum OperationKind
     Merge,
     Split,
     PdfToImages,
+    ImageMerge,
 }
 
 /// <summary>

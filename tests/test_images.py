@@ -92,3 +92,24 @@ def test_convert_images_operation_unsupported_format(tmp_path: Path) -> None:
         )
 
     assert excinfo.value.code == UNSUPPORTED_FORMAT
+
+
+def test_image_to_pdf_queue_order(tmp_path: Path) -> None:
+    """队列模式：按 sources 显式顺序合成 PDF。"""
+    from doctools.batch import run_operation
+
+    a, b = tmp_path / "a.png", tmp_path / "b.png"
+    _make_img(a, (200, 40, 40))
+    _make_img(b, (40, 120, 200))
+    out = tmp_path / "merged.pdf"
+
+    results = run_operation(
+        "image-to-pdf",
+        source_path="",
+        output_path=str(out),
+        sources=[str(b), str(a)],  # 显式顺序：b 在前
+    )
+
+    assert all(r.ok for r in results)
+    assert [Path(r.src).name for r in results] == ["b.png", "a.png"]
+    assert len(PdfReader(str(out)).pages) == 2

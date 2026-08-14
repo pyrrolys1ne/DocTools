@@ -24,6 +24,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public IReadOnlyList<CategoryDef> Categories { get; }
     public ObservableCollection<FileResult> Results { get; } = new();
     public ObservableCollection<string> MergeSources { get; } = new();
+    public ObservableCollection<string> ImageSources { get; } = new();
 
     public AppSettings Settings => _settings;
 
@@ -49,7 +50,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             new("remove-footers", "去页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveFooters", inputCategory: "word"),
             new("remove-headers-footers", "去页眉页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeadersFooters", inputCategory: "word"),
             // 图片类
-            new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.ImageToPdf", inputCategory: "image"),
+            new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.ImageMerge, "图片处理", "Icon.ImageToPdf", inputCategory: "image"),
             new("compress-images", "图片压缩", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages", inputCategory: "image"),
             new("convert-images", "图片格式互转", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages", inputCategory: "image"),
             // PPT 类
@@ -76,6 +77,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BrowseOutputDirCommand = new RelayCommand(BrowseOutputDir);
         BrowseMergeOutputCommand = new RelayCommand(BrowseMergeOutput);
         AddMergeFilesCommand = new RelayCommand(AddMergeFiles);
+        AddImageFilesCommand = new RelayCommand(AddImageFiles);
+        MoveImageUpCommand = new RelayCommand(() => MoveImage(-1));
+        MoveImageDownCommand = new RelayCommand(() => MoveImage(1));
         ExportDiagnosticsCommand = new RelayCommand(ExportDiagnostics);
         CheckUpdatesCommand = new RelayCommand(CheckForUpdates);
         SelectCategoryCommand = new RelayCommand<CategoryDef>(SelectCategory);
@@ -206,6 +210,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsPdfToImagesVisible));
             OnPropertyChanged(nameof(IsCompressVisible));
             OnPropertyChanged(nameof(IsConvertImagesVisible));
+            OnPropertyChanged(nameof(IsImageMergeVisible));
             ApplyRecents(value);
         }
     }
@@ -282,6 +287,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool IsConvertImagesVisible => SelectedOperation?.Id == "convert-images";
+
+    public bool IsImageMergeVisible => SelectedOperation?.Kind == OperationKind.ImageMerge;
+
+    /// <summary>图片转 PDF 队列当前选中项（上移/下移基于它）。</summary>
+    public int SelectedImageIndex { get; set; } = -1;
 
     /// <summary>图片格式互转可选的目标格式。</summary>
     public IReadOnlyList<string> ImageTargetFormats { get; } = new[] { "png", "jpg", "webp", "bmp", "gif", "tiff" };
@@ -374,6 +384,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public RelayCommand BrowseOutputDirCommand { get; }
     public RelayCommand BrowseMergeOutputCommand { get; }
     public RelayCommand AddMergeFilesCommand { get; }
+    public RelayCommand AddImageFilesCommand { get; }
+    public RelayCommand MoveImageUpCommand { get; }
+    public RelayCommand MoveImageDownCommand { get; }
     public RelayCommand ExportDiagnosticsCommand { get; }
     public RelayCommand CheckUpdatesCommand { get; }
 
@@ -574,6 +587,40 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private void AddImageFiles()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp;*.tif;*.tiff",
+            Multiselect = true,
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            foreach (var file in dialog.FileNames)
+            {
+                ImageSources.Add(file);
+            }
+        }
+    }
+
+    private void MoveImage(int delta)
+    {
+        var index = SelectedImageIndex;
+        if (index < 0 || index >= ImageSources.Count)
+        {
+            return;
+        }
+
+        var target = index + delta;
+        if (target < 0 || target >= ImageSources.Count)
+        {
+            return;
+        }
+
+        ImageSources.Move(index, target);
+        SelectedImageIndex = target;
+    }
+
     private static string BuildFilter(OperationDef? operation)
     {
         if (operation is null || operation.Exts.Length == 0)
@@ -645,6 +692,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 }
 
                 request.SourcePath = SourcePath.Trim();
+                request.OutputPath = OutputPath.Trim();
+                break;
+            case OperationKind.ImageMerge:
+                if (ImageSources.Count == 0)
+                {
+                    Error = "请至少添加一张图片";
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(OutputPath))
+                {
+                    Error = "请选择输出 PDF 文件";
+                    return;
+                }
+
+                request.Sources = ImageSources.ToList();
                 request.OutputPath = OutputPath.Trim();
                 break;
         }

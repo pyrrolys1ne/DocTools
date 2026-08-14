@@ -255,7 +255,13 @@ def _handle_pdf_to_excel(op: str, p: OpParams) -> list[FileResult]:
 def _handle_image_to_pdf(op: str, p: OpParams) -> list[FileResult]:
     from doctools.images import merge_images_to_pdf  # 惰性
 
-    # 图片转 PDF 只保留"多合一"：目录内所有图片（或单个图片）合成一个 PDF
+    if p.srcs:
+        # 队列模式：按显式顺序合并多张图片到一个 PDF（输出为 PDF 文件路径）
+        if p.dst is None:
+            raise ValueError("图片转 PDF 队列模式需要指定输出 PDF 文件")
+        return merge_images_to_pdf(p.srcs, p.dst, p.on_progress)
+
+    # 目录模式：目录内所有图片（或单个图片）合成一个 PDF
     images = discover(p.src, p.recursive, IMAGE_SUFFIXES) if p.src.is_dir() else [p.src]
     if not images:
         raise ValueError(f"目录中没有找到图片文件：{p.source_path}")

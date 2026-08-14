@@ -61,6 +61,29 @@
             </DockPanel>
         </StackPanel>
 
+        <StackPanel Visibility="{Binding IsImageMergeVisible, Converter={StaticResource BoolToVis}}">
+            <DockPanel Margin="0,0,0,8">
+                <Button DockPanel.Dock="Right" Content="添加图片" Style="{StaticResource SecondaryButton}"
+                        Command="{Binding AddImageFilesCommand}"/>
+                <TextBlock Text="按队列顺序合成 PDF（可上移/下移调整页序）" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.TextMuted}" FontSize="12.5"/>
+            </DockPanel>
+            <ListBox ItemsSource="{Binding ImageSources}" Height="150" Style="{StaticResource PlainListBox}"
+                     SelectedIndex="{Binding SelectedImageIndex}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button Content="上移" Style="{StaticResource SecondaryButton}" Command="{Binding MoveImageUpCommand}"/>
+                <Button Content="下移" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                        Command="{Binding MoveImageDownCommand}"/>
+            </StackPanel>
+            <TextBlock Text="输出 PDF 文件" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="选择文件" Style="{StaticResource SecondaryButton}"
+                        Command="{Binding BrowseMergeOutputCommand}" Margin="6,0,0,0"/>
+                <TextBox Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"
+                          Style="{StaticResource InputBox}"/>
+            </DockPanel>
+        </StackPanel>
+
         <StackPanel Visibility="{Binding IsSplitVisible, Converter={StaticResource BoolToVis}}">
             <TextBlock Text="源 PDF 文件" Style="{StaticResource FieldLabel}"/>
             <DockPanel>
