@@ -43,12 +43,16 @@ public static class ListBoxReorderBehavior
             listBox.AllowDrop = true;
             listBox.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
             listBox.PreviewMouseMove += OnPreviewMouseMove;
+            listBox.DragOver += OnDragOver;
+            listBox.GiveFeedback += OnGiveFeedback;
             listBox.Drop += OnDrop;
         }
         else
         {
             listBox.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
             listBox.PreviewMouseMove -= OnPreviewMouseMove;
+            listBox.DragOver -= OnDragOver;
+            listBox.GiveFeedback -= OnGiveFeedback;
             listBox.Drop -= OnDrop;
         }
     }
@@ -99,6 +103,24 @@ public static class ListBoxReorderBehavior
         DragDrop.DoDragDrop(listBox, data, DragDropEffects.Move);
     }
 
+    private static void OnDragOver(object sender, DragEventArgs e)
+    {
+        // 必须显式设置 Effects，否则 WPF 默认拒绝 drop（光标显示禁止符号，Drop 不触发）
+        if (!e.Data.GetDataPresent(DragFormat) || sender is not ListBox)
+        {
+            return;
+        }
+
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
+    }
+
+    private static void OnGiveFeedback(object sender, GiveFeedbackEventArgs e)
+    {
+        e.UseDefaultCursors = true;
+        e.Handled = true;
+    }
+
     private static void OnDrop(object sender, DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(DragFormat) || sender is not ListBox listBox)
@@ -129,6 +151,8 @@ public static class ListBoxReorderBehavior
         {
             collection.Move(oldIndex, newIndex);
         }
+
+        e.Handled = true;
     }
 
     private static T? FindAncestor<T>(DependencyObject? obj) where T : DependencyObject

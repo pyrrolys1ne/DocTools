@@ -44,8 +44,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // PDF 类
             new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", inputCategory: "pdf"),
             new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToPpt", inputCategory: "pdf"),
-            new("pdf-to-excel", "PDF 转 Excel", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", inputCategory: "pdf"),
-            new("pdf-to-markdown", "PDF 解析（MinerU）", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", requiresEngine: "mineru", inputCategory: "pdf"),
+            new("pdf-to-excel", "PDF 转 Excel", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToExcel", inputCategory: "pdf"),
+            new("pdf-to-markdown", "PDF 解析（MinerU）", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToMarkdown", requiresEngine: "mineru", inputCategory: "pdf"),
             new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages, "PDF 转换", "Icon.PdfToImages", inputCategory: "pdf"),
             new("merge-pdf", "合并 PDF", new[] { ".pdf" }, OperationKind.Merge, "PDF 工具", "Icon.MergePdf", inputCategory: "pdf"),
             new("split-pdf", "拆分 PDF", new[] { ".pdf" }, OperationKind.Split, "PDF 工具", "Icon.SplitPdf", inputCategory: "pdf"),
@@ -68,9 +68,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         Categories = new List<CategoryDef>
         {
-            new("pdf", "PDF", "Icon.PdfToWord", "PDF 转 Word/PPT/Excel/图片，合并与拆分", Operations.Where(o => o.InputCategory == "pdf").ToList()),
-            new("word", "Word", "Icon.WordToPdf", "Word 转 PDF，去页眉页脚", Operations.Where(o => o.InputCategory == "word").ToList()),
-            new("image", "图片", "Icon.ImageToPdf", "图片转 PDF、压缩、格式互转", Operations.Where(o => o.InputCategory == "image").ToList()),
+            new("pdf", "PDF", "Icon.Pdf", "PDF 转 Word/PPT/Excel/图片，合并与拆分", Operations.Where(o => o.InputCategory == "pdf").ToList()),
+            new("word", "Word", "Icon.Word", "Word 转 PDF，去页眉页脚", Operations.Where(o => o.InputCategory == "word").ToList()),
+            new("image", "图片", "Icon.PdfToImages", "图片转 PDF、压缩、格式互转", Operations.Where(o => o.InputCategory == "image").ToList()),
             new("ppt", "PPT", "Icon.PptToPdf", "PPT 转 PDF", Operations.Where(o => o.InputCategory == "ppt").ToList()),
         };
 
@@ -297,8 +297,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         "remove-headers" => "批量去除 Word 文档页眉",
         "remove-footers" => "批量去除 Word 文档页脚",
         "remove-headers-footers" => "一次完成去页眉与页脚",
-        "word-to-pdf" => "Word 转 PDF（Office 或 LibreOffice）",
-        "ppt-to-pdf" => "PPT 转 PDF（Office 或 LibreOffice）",
+        "word-to-pdf" => "Word 转 PDF",
+        "ppt-to-pdf" => "PPT 转 PDF",
         "image-to-pdf" => "目录内全部图片合成一个 PDF",
         "pdf-to-word" => "PDF 转 Word（扫描件自动 OCR）",
         "pdf-to-ppt" => "PDF 每页渲染为一张幻灯片",
@@ -670,8 +670,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return "所有文件|*.*";
         }
 
-        var pattern = string.Join(";", operation.Exts);
-        return $"{pattern} 文件|{pattern}|所有文件|*.*";
+        var patterns = operation.Exts.Select(e => "*" + e).ToArray();
+        var pattern = string.Join(";", patterns);
+        return $"支持的文件 ({pattern})|{pattern}|所有文件|*.*";
     }
 
     private async void Start()

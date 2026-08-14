@@ -134,6 +134,9 @@ class JobManager:
         target_format: str,
     ) -> None:
         job.status = "running"
+        # 立即给出"正在处理哪个输入"的反馈，避免单文件/慢转换期间界面毫无动静
+        job.current = source_path or (sources[0] if sources else "")
+        job.updated.set()
 
         def on_progress(total: int, done: int, result: FileResult) -> None:
             job.total = total
