@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from doctools.docx import strip_footers, strip_headers, strip_headers_footers
-from doctools.errors import DoctoolsError
+from doctools.errors import UNSUPPORTED_FORMAT, DoctoolsError
 from doctools.model import (
     CONVERT_SUFFIXES,
     IMAGE_SUFFIXES,
@@ -184,6 +184,8 @@ class OpParams:
     sources: list[str] | None = None
     page_ranges: str = ""
     quality: int = 80
+    # 图片格式互转的目标格式（去点小写，如 "png"/"jpg"）
+    target_format: str = ""
     on_progress: ProgressFn | None = None
 
     @property
@@ -258,6 +260,26 @@ def _handle_compress_images(op: str, p: OpParams) -> list[FileResult]:
     return process_batch(plan, on_progress=p.on_progress, worker=worker)
 
 
+def _handle_convert_images(op: str, p: OpParams) -> list[FileResult]:
+    from doctools.images import SUPPORTED_TARGET_FORMATS, convert_image  # 惰性
+
+    fmt = (p.target_format or "png").lower().lstrip(".")
+    if fmt not in SUPPORTED_TARGET_FORMATS:
+        raise DoctoolsError(
+            UNSUPPORTED_FORMAT,
+            f"不支持的目标图片格式：{fmt}（可选：{'、'.join(SUPPORTED_TARGET_FORMATS)}）",
+            f"Unsupported target image format: {fmt}",
+        )
+    plan = build_convert_plan(
+        p.src, p.dst, p.recursive, p.output_is_dir,
+        suffixes=IMAGE_SUFFIXES,
+        out_suffix=f".{fmt}",
+        default_out_dir="converted",
+    )
+    worker = lambda s, d: convert_image(s, d, fmt)  # noqa: E731
+    return process_batch(plan, on_progress=p.on_progress, worker=worker)
+
+
 def _handle_merge_pdf(op: str, p: OpParams) -> list[FileResult]:
     if not p.srcs:
         raise ValueError("合并 PDF 需要至少一个源文件")
@@ -290,6 +312,7 @@ OPERATION_HANDLERS: dict[str, Callable[[str, OpParams], list[FileResult]]] = {
     "pdf-to-images": _handle_pdf_to_images,
     "image-to-pdf": _handle_image_to_pdf,
     "compress-images": _handle_compress_images,
+    "convert-images": _handle_convert_images,
     "merge-pdf": _handle_merge_pdf,
     "split-pdf": _handle_split_pdf,
 }
@@ -307,6 +330,7 @@ def run_operation(
     sources: list[str] | None = None,
     page_ranges: str = "",
     quality: int = 80,
+    target_format: str = "",
     on_progress: ProgressFn | None = None,
 ) -> list[FileResult]:
     """按操作名执行并返回逐文件结果。参数校验失败抛 ``ValueError``。"""
@@ -321,6 +345,7 @@ def run_operation(
         sources=sources,
         page_ranges=page_ranges,
         quality=quality,
+        target_format=target_format,
         on_progress=on_progress,
     )
     return handler(operation, params)

@@ -30,6 +30,8 @@ class JobRequest(BaseModel):
     page_ranges: str = ""
     # 图片压缩：JPEG 重编码质量（1-100）
     quality: int = 80
+    # 图片格式互转：目标格式（去点小写，如 "png"/"jpg"）
+    target_format: str = ""
 
 
 class JobResult(BaseModel):

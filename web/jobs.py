@@ -95,6 +95,7 @@ class JobManager:
         sources: list[str] | None = None,
         page_ranges: str = "",
         quality: int = 80,
+        target_format: str = "",
     ) -> Job:
         job = Job(id=uuid.uuid4().hex[:8])
         with self._lock:
@@ -112,6 +113,7 @@ class JobManager:
                 sources,
                 page_ranges,
                 quality,
+                target_format,
             ),
             daemon=True,
         )
@@ -129,6 +131,7 @@ class JobManager:
         sources: list[str] | None,
         page_ranges: str,
         quality: int,
+        target_format: str,
     ) -> None:
         job.status = "running"
 
@@ -149,6 +152,7 @@ class JobManager:
                 sources=sources,
                 page_ranges=page_ranges,
                 quality=quality,
+                target_format=target_format,
                 on_progress=on_progress,
             )
         except Exception as exc:  # noqa: BLE001 - 参数校验/引擎缺失等统一上报

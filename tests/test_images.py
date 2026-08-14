@@ -1,13 +1,15 @@
-"""图片 → PDF 测试（Pillow，跨平台）。"""
+"""图片 → PDF / 图片格式互转测试（Pillow，跨平台）。"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from pypdf import PdfReader
 
-from doctools.images import compress_image, merge_images_to_pdf
+from doctools.errors import UNSUPPORTED_FORMAT, DoctoolsError
+from doctools.images import compress_image, convert_image, merge_images_to_pdf
 
 
 def _make_img(path: Path, color: tuple[int, int, int]) -> None:
@@ -49,3 +51,44 @@ def test_merge_skips_corrupt_image(tmp_path: Path) -> None:
     assert results[0].ok is False
     assert results[1].ok is True
     assert len(PdfReader(str(dst)).pages) == 1
+
+
+def test_convert_image_png_to_jpeg(tmp_path: Path) -> None:
+    src = tmp_path / "a.png"
+    dst = tmp_path / "out.jpg"
+    Image.new("RGBA", (60, 40), (200, 60, 60, 128)).save(src)  # 带透明通道
+
+    convert_image(src, dst, "jpg")
+
+    assert dst.exists()
+    img = Image.open(dst)
+    assert img.format == "JPEG"
+    assert img.mode == "RGB"  # JPEG 无透明通道，已转 RGB
+
+
+def test_convert_image_png_to_webp(tmp_path: Path) -> None:
+    src = tmp_path / "a.png"
+    dst = tmp_path / "out.webp"
+    _make_img(src, (10, 120, 10))
+
+    convert_image(src, dst, "webp")
+
+    assert dst.exists()
+    assert Image.open(dst).format == "WEBP"
+
+
+def test_convert_images_operation_unsupported_format(tmp_path: Path) -> None:
+    from doctools.batch import run_operation
+
+    src = tmp_path / "a.png"
+    _make_img(src, (10, 10, 10))
+
+    with pytest.raises(DoctoolsError) as excinfo:
+        run_operation(
+            "convert-images",
+            source_path=str(src),
+            output_path=str(tmp_path),
+            target_format="heic",
+        )
+
+    assert excinfo.value.code == UNSUPPORTED_FORMAT

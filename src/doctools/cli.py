@@ -317,6 +317,42 @@ def compress_images_cmd(
     )
 
 
+@app.command("convert-images")
+def convert_images_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的图片文件或包含图片的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出目录。默认在源路径旁生成 {目录名}_converted",
+    ),
+    to: str = typer.Option(
+        "png", "--to", help="目标格式（png/jpg/webp/bmp/gif/tiff，默认 png）"
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的图片，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """图片格式互转（Pillow，支持 png/jpg/webp/bmp/gif/tiff）。"""
+    _run_operation_report(
+        "convert-images",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+        target_format=to,
+    )
+
+
 @app.command("pdf-to-word")
 def pdf_to_word_cmd(
     input_path: Path = typer.Argument(
