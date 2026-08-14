@@ -9,12 +9,19 @@ public sealed class DocToolsApi
 {
     private readonly HttpClient _http;
 
-    public Uri BaseUrl { get; }
+    public Uri BaseUrl { get; private set; }
 
     public DocToolsApi(Uri baseUrl)
     {
         BaseUrl = baseUrl;
         _http = new HttpClient { BaseAddress = baseUrl, Timeout = TimeSpan.FromMinutes(5) };
+    }
+
+    /// <summary>更新后端地址（docserver 重启后端口可能变化）。</summary>
+    public void UpdateBaseUrl(Uri baseUrl)
+    {
+        BaseUrl = baseUrl;
+        _http.BaseAddress = baseUrl;
     }
 
     public async Task<JobStatus> CreateJobAsync(JobRequest request, CancellationToken ct = default)

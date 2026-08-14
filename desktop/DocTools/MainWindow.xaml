@@ -34,6 +34,9 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource TitleBarButton}" Command="{Binding OpenSettingsCommand}" ToolTip="设置（MinerU 等）">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="12"/>
+                </Button>
                 <Button Style="{StaticResource TitleBarButton}" Click="CheckUpdatesClick" ToolTip="检查更新">
                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE896;" FontSize="12"/>
                 </Button>

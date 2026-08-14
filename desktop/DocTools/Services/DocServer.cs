@@ -13,7 +13,7 @@ public sealed class DocServer : IDisposable
 
     public Uri BaseUrl { get; private set; } = null!;
 
-    public void Start()
+    public void Start(AppSettings? settings = null)
     {
         var exe = ResolveExecutablePath();
         if (exe is null)
@@ -33,6 +33,7 @@ public sealed class DocServer : IDisposable
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
+        InjectMineruEnv(psi, settings);
         _process = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 docserver 进程。");
 
         const string prefix = "DOCSERVER_PORT=";
@@ -49,6 +50,39 @@ public sealed class DocServer : IDisposable
         // stdout 读到 EOF 说明进程启动失败，把 stderr 内容带出来便于排错。
         var detail = _process.StandardError.ReadToEnd();
         throw new InvalidOperationException($"docserver 启动失败：{detail}");
+    }
+
+    /// <summary>重启 docserver（应用新的 MinerU 等配置），返回新的 BaseUrl。</summary>
+    public Uri Restart(AppSettings settings)
+    {
+        Dispose();
+        Start(settings);
+        return BaseUrl;
+    }
+
+    private static void InjectMineruEnv(ProcessStartInfo psi, AppSettings? settings)
+    {
+        if (settings is null)
+        {
+            return;
+        }
+
+        var apiUrl = settings.MineruApiUrl.Trim();
+        var token = settings.MineruToken.Trim();
+        // 只填 Token（key）时默认走官方 mineru.net，实现"填一个 key 就能用"。
+        if (string.IsNullOrWhiteSpace(apiUrl) && !string.IsNullOrWhiteSpace(token))
+        {
+            apiUrl = "https://mineru.net/api/v4";
+        }
+
+        if (!string.IsNullOrWhiteSpace(apiUrl))
+        {
+            psi.EnvironmentVariables["DOCTOOLS_MINERU_API_URL"] = apiUrl;
+        }
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            psi.EnvironmentVariables["DOCTOOLS_MINERU_TOKEN"] = token;
+        }
     }
 
     private static string? ResolveExecutablePath()

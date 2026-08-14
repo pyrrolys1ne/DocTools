@@ -13,6 +13,7 @@ namespace DocTools.ViewModels;
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly DocToolsApi _api;
+    private readonly DocServer _docServer;
     private readonly SynchronizationContext _ui;
     private readonly AppSettings _settings;
     private readonly UpdateService _updater = new();
@@ -28,10 +29,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public AppSettings Settings => _settings;
 
-    public MainViewModel(DocToolsApi api, AppSettings settings)
+    public MainViewModel(DocToolsApi api, AppSettings settings, DocServer docServer)
     {
         _api = api;
+        _docServer = docServer;
         _settings = settings;
+        _mineruApiUrl = settings.MineruApiUrl;
+        _mineruToken = settings.MineruToken;
         _ui = SynchronizationContext.Current
             ?? throw new InvalidOperationException("MainViewModel 必须在 UI 线程创建。");
 
@@ -86,6 +90,63 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SelectCategoryCommand = new RelayCommand<CategoryDef>(SelectCategory);
         SelectOperationCommand = new RelayCommand<OperationDef>(SelectOperation);
         BackCommand = new RelayCommand(GoBack);
+        OpenSettingsCommand = new RelayCommand(OpenSettings);
+    }
+
+    // ---- MinerU 设置 ----
+
+    private string _mineruApiUrl;
+    private string _mineruToken;
+
+    /// <summary>MinerU API 地址（自建 mineru-api，留空则默认官方 mineru.net）。</summary>
+    public string MineruApiUrl
+    {
+        get => _mineruApiUrl;
+        set { _mineruApiUrl = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>MinerU Token（mineru.net 官方 Token，或自建服务的鉴权 Token）。</summary>
+    public string MineruToken
+    {
+        get => _mineruToken;
+        set { _mineruToken = value; OnPropertyChanged(); }
+    }
+
+    public RelayCommand OpenSettingsCommand { get; }
+
+    private void OpenSettings()
+    {
+        var dialog = new Views.SettingsWindow { Owner = Application.Current.MainWindow };
+        dialog.DataContext = this;
+        dialog.ShowDialog();
+    }
+
+    /// <summary>保存 MinerU 配置并重启 docserver 使其生效（填 key 即可用）。</summary>
+    public void SaveMineruSettings()
+    {
+        _settings.MineruApiUrl = MineruApiUrl.Trim();
+        _settings.MineruToken = MineruToken.Trim();
+        _settings.Save();
+
+        try
+        {
+            var newUrl = _docServer.Restart(_settings);
+            _api.UpdateBaseUrl(newUrl);
+            _ = LoadCapabilitiesAsync();
+            MessageBox.Show(
+                "MinerU 配置已保存并生效，现在可以使用「PDF 解析（MinerU）」了。",
+                "DocTools",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"配置已保存，但重启本地服务失败：{ex.Message}\n请重启应用后生效。",
+                "DocTools",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     // ---- 卡片式导航（主页 → 分类 → 操作）----

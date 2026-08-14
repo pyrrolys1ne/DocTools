@@ -11,6 +11,12 @@ public sealed class AppSettings
     /// <summary>启动时静默检查更新（默认开；手动"检查更新"按钮不受此开关限制）。</summary>
     public bool CheckForUpdates { get; set; } = true;
 
+    /// <summary>MinerU API 地址（自建 mineru-api，留空则默认官方 mineru.net）。</summary>
+    public string MineruApiUrl { get; set; } = "";
+
+    /// <summary>MinerU Token（mineru.net 官方 Token，或自建服务的鉴权 Token）。</summary>
+    public string MineruToken { get; set; } = "";
+
     public Dictionary<string, string> Sources { get; set; } = new();
 
     public Dictionary<string, string> Outputs { get; set; } = new();

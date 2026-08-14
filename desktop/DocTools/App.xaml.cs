@@ -19,7 +19,7 @@ public partial class App : Application
         {
             // 拉起随包分发的本地 API 服务，客户端与后端通过 localhost HTTP 通信。
             _server = new DocServer();
-            _server.Start();
+            _server.Start(settings);
         }
         catch (Exception ex)
         {
@@ -32,7 +32,7 @@ public partial class App : Application
             return;
         }
 
-        var viewModel = new MainViewModel(new DocToolsApi(_server.BaseUrl), settings);
+        var viewModel = new MainViewModel(new DocToolsApi(_server.BaseUrl), settings, _server);
         var window = new MainWindow { DataContext = viewModel };
         MainWindow = window;
         window.Show();
