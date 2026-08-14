@@ -91,15 +91,40 @@ def test_pdf_to_docx_fallback_on_engine_failure(
     assert any("Test" in p.text for p in Document(str(dst)).paragraphs)
 
 
-def test_pdf_to_docx_scanned_pdf_reports_no_text(tmp_path: Path) -> None:
-    """纯图片（无文字）PDF 报 PDF_NO_TEXT，而不是产出空白 docx。"""
-    src = tmp_path / "scan.pdf"
-    c = canvas.Canvas(str(src))
+def _make_scanned_pdf(path: Path) -> None:
+    c = canvas.Canvas(str(path))
     c.rect(50, 50, 500, 700, fill=1, stroke=0)  # 只画色块，无文字
     c.showPage()
     c.save()
+
+
+def test_pdf_to_docx_scanned_pdf_no_ocr_reports_no_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """扫描件 + OCR 不可用 → 报 PDF_NO_TEXT。"""
+    src = tmp_path / "scan.pdf"
+    _make_scanned_pdf(src)
+    monkeypatch.setattr("doctools.ocr.ocr_available", lambda: False)
 
     with pytest.raises(DoctoolsError) as excinfo:
         pdf_to_docx(src, tmp_path / "out.docx")
 
     assert excinfo.value.code == PDF_NO_TEXT
+
+
+def test_pdf_to_docx_scanned_pdf_ocr_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """扫描件 + OCR 可用 → 走 OCR 回退，返回附注且输出合法 docx。"""
+    src = tmp_path / "scan.pdf"
+    _make_scanned_pdf(src)
+    monkeypatch.setattr("doctools.ocr.ocr_available", lambda: True)
+    monkeypatch.setattr("doctools.ocr.ocr_pdf_page", lambda page, dpi=300: "OCR 识别文本")
+
+    note = pdf_to_docx(src, tmp_path / "out.docx")
+
+    assert note is not None and "OCR" in note
+    assert (tmp_path / "out.docx").exists()
+    with zipfile.ZipFile(str(tmp_path / "out.docx")) as zf:
+        assert "word/document.xml" in zf.namelist()
+    assert any("OCR 识别文本" in p.text for p in Document(str(tmp_path / "out.docx")).paragraphs)

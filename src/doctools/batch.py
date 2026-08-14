@@ -240,6 +240,18 @@ def _handle_pdf_to_images(op: str, p: OpParams) -> list[FileResult]:
     return pdf_to_images(p.src, out_dir, p.on_progress)
 
 
+def _handle_pdf_to_excel(op: str, p: OpParams) -> list[FileResult]:
+    plan = build_convert_plan(
+        p.src, p.dst, p.recursive, p.output_is_dir,
+        suffixes=(".pdf",),
+        out_suffix=".xlsx",
+        default_out_dir="excel",
+    )
+    from doctools.pdf_excel import pdf_to_excel  # 惰性
+
+    return process_batch(plan, on_progress=p.on_progress, worker=pdf_to_excel)
+
+
 def _handle_image_to_pdf(op: str, p: OpParams) -> list[FileResult]:
     from doctools.images import merge_images_to_pdf  # 惰性
 
@@ -310,6 +322,7 @@ OPERATION_HANDLERS: dict[str, Callable[[str, OpParams], list[FileResult]]] = {
     "pdf-to-word": _handle_pdf_to_office,
     "pdf-to-ppt": _handle_pdf_to_office,
     "pdf-to-images": _handle_pdf_to_images,
+    "pdf-to-excel": _handle_pdf_to_excel,
     "image-to-pdf": _handle_image_to_pdf,
     "compress-images": _handle_compress_images,
     "convert-images": _handle_convert_images,
