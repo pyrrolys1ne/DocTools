@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec：把 web/ 后端打包成 onedir 控制台程序 docserver.exe。
 
 桌面客户端以子进程拉起 docserver.exe（--port 0），并从 stdout 读取
@@ -13,6 +13,13 @@ from PyInstaller.utils.hooks import collect_submodules
 # PyInstaller 中相对路径以 spec 文件所在目录为基准，这里显式基于 SPECPATH。
 spec_dir = os.path.abspath(SPECPATH)
 repo_root = os.path.abspath(os.path.join(spec_dir, ".."))
+
+# 可选：捆绑便携版 LibreOffice（若 bin/libreoffice 存在，随 docserver 分发，
+# 作为 word/ppt→pdf 的兜底引擎）。运行时 find_soffice 会在 _MEIPASS 下探测。
+datas = []
+libreoffice_dir = os.path.join(repo_root, "bin", "libreoffice")
+if os.path.isdir(libreoffice_dir):
+    datas.append((libreoffice_dir, "libreoffice"))
 
 hiddenimports = []
 hiddenimports += collect_submodules("uvicorn")
@@ -33,7 +40,7 @@ a = Analysis(
     [os.path.join(spec_dir, "docserver_entry.py")],
     pathex=[repo_root, os.path.join(repo_root, "src")],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
