@@ -1,4 +1,4 @@
-﻿; DocTools 安装器（Inno Setup 6）
+; DocTools 安装器（Inno Setup 6）
 ; 构建入口：packaging\build_installer.ps1（自动传递 /DSourceDir /DOutputDir /DAppVersion）
 ; 手动编译示例：
 ;   ISCC.exe packaging\installer.iss /DSourceDir=dist\DocTools-win-x64 /DOutputDir=dist /DAppVersion=1.1.0
@@ -43,9 +43,11 @@ CloseApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务:"; Flags: unchecked
+Name: "libreoffice"; Description: "下载便携版 LibreOffice（约 350MB，作 Word/PPT 转 PDF 兜底引擎）"; GroupDescription: "附加任务:"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "download_libreoffice.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -53,3 +55,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "powershell.exe"; Description: "下载便携版 LibreOffice"; Tasks: libreoffice; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\tools\download_libreoffice.ps1"" -Url ""https://mirrors.ustc.edu.cn/tdf/libreoffice/portable/26.2.4/LibreOfficePortable_26.2.4_MultilingualStandard.paf.exe"" -TargetDir ""{app}\libreoffice"""; \
+    Flags: postinstall runhidden

@@ -31,21 +31,14 @@
                 <Image Source="Assets/icon.png" Width="18" Height="18"/>
                 <TextBlock Text="DocTools" Margin="9,0,0,0" FontSize="13" FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center"/>
+                <Button Style="{StaticResource TitleBarButton}" Command="{Binding OpenSettingsCommand}"
+                        ToolTip="设置" Margin="12,0,0,0" Width="32" Height="32"
+                        VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="13"/>
+                </Button>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                <Button Style="{StaticResource TitleBarButton}" Command="{Binding OpenSettingsCommand}" ToolTip="设置（MinerU 等）">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="12"/>
-                </Button>
-                <Button Style="{StaticResource TitleBarButton}" Click="CheckUpdatesClick" ToolTip="检查更新">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE896;" FontSize="12"/>
-                </Button>
-                <Button Style="{StaticResource TitleBarButton}" Click="DiagnosticsClick" ToolTip="导出诊断报告">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="12"/>
-                </Button>
-                <Button Style="{StaticResource TitleBarButton}" Click="ThemeClick" ToolTip="切换主题">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE706;" FontSize="12"/>
-                </Button>
                 <Button Style="{StaticResource TitleBarButton}" Click="MinimizeClick">
                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE921;" FontSize="10"/>
                 </Button>
@@ -59,7 +52,7 @@
         </Grid>
 
         <Grid Grid.Row="1">
-            <Border Margin="0,10,10,10"
+            <Border Margin="10"
                     Background="{DynamicResource Brush.Surface}"
                     BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1"
                     CornerRadius="14">

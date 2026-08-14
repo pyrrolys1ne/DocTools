@@ -57,7 +57,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // 图片类
             new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.ImageMerge, "图片处理", "Icon.ImageToPdf", inputCategory: "image"),
             new("compress-images", "图片压缩", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages", inputCategory: "image"),
-            new("convert-images", "图片格式互转", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages", inputCategory: "image"),
+            new("convert-images", "图片格式互转", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.ConvertImages", inputCategory: "image"),
             // PPT 类
             new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch, "Office 转换", "Icon.PptToPdf", requiresEngine: "office", inputCategory: "ppt"),
         };
@@ -83,15 +83,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BrowseMergeOutputCommand = new RelayCommand(BrowseMergeOutput);
         AddMergeFilesCommand = new RelayCommand(AddMergeFiles);
         AddImageFilesCommand = new RelayCommand(AddImageFiles);
-        MoveImageUpCommand = new RelayCommand(() => MoveImage(-1));
-        MoveImageDownCommand = new RelayCommand(() => MoveImage(1));
         ExportDiagnosticsCommand = new RelayCommand(ExportDiagnostics);
         CheckUpdatesCommand = new RelayCommand(CheckForUpdates);
         SelectCategoryCommand = new RelayCommand<CategoryDef>(SelectCategory);
         SelectOperationCommand = new RelayCommand<OperationDef>(SelectOperation);
         BackCommand = new RelayCommand(GoBack);
         OpenSettingsCommand = new RelayCommand(OpenSettings);
+        ToggleThemeCommand = new RelayCommand(ToggleTheme);
     }
+
+    /// <summary>切换浅色/深色主题（设置面板调用）。</summary>
+    public void ToggleTheme()
+    {
+        ThemeManager.Toggle();
+        _settings.Theme = ThemeManager.Current;
+        _settings.Save();
+    }
+
+    public RelayCommand ToggleThemeCommand { get; }
 
     // ---- MinerU 设置 ----
 
@@ -278,7 +287,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsCompressVisible));
             OnPropertyChanged(nameof(IsConvertImagesVisible));
             OnPropertyChanged(nameof(IsImageMergeVisible));
-            ApplyRecents(value);
         }
     }
 
@@ -358,9 +366,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public bool IsImageMergeVisible => SelectedOperation?.Kind == OperationKind.ImageMerge;
 
-    /// <summary>图片转 PDF 队列当前选中项（上移/下移基于它）。</summary>
-    public int SelectedImageIndex { get; set; } = -1;
-
     /// <summary>图片格式互转可选的目标格式。</summary>
     public IReadOnlyList<string> ImageTargetFormats { get; } = new[] { "png", "jpg", "webp", "bmp", "gif", "tiff" };
 
@@ -433,17 +438,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public bool ResultsCardVisible => Results.Count > 0 || Phase == "running";
 
-    private void ApplyRecents(OperationDef? op)
-    {
-        if (op is null)
-        {
-            return;
-        }
-
-        SourcePath = _settings.Sources.TryGetValue(op.Id, out var source) ? source : "";
-        OutputPath = _settings.Outputs.TryGetValue(op.Id, out var output) ? output : "";
-    }
-
     // ---- 命令 ----
 
     public RelayCommand StartCommand { get; }
@@ -453,8 +447,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public RelayCommand BrowseMergeOutputCommand { get; }
     public RelayCommand AddMergeFilesCommand { get; }
     public RelayCommand AddImageFilesCommand { get; }
-    public RelayCommand MoveImageUpCommand { get; }
-    public RelayCommand MoveImageDownCommand { get; }
     public RelayCommand ExportDiagnosticsCommand { get; }
     public RelayCommand CheckUpdatesCommand { get; }
 
@@ -671,24 +663,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private void MoveImage(int delta)
-    {
-        var index = SelectedImageIndex;
-        if (index < 0 || index >= ImageSources.Count)
-        {
-            return;
-        }
-
-        var target = index + delta;
-        if (target < 0 || target >= ImageSources.Count)
-        {
-            return;
-        }
-
-        ImageSources.Move(index, target);
-        SelectedImageIndex = target;
-    }
-
     private static string BuildFilter(OperationDef? operation)
     {
         if (operation is null || operation.Exts.Length == 0)
@@ -779,10 +753,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 request.OutputPath = OutputPath.Trim();
                 break;
         }
-
-        _settings.Sources[operation.Id] = SourcePath.Trim();
-        _settings.Outputs[operation.Id] = OutputPath.Trim();
-        _settings.Save();
 
         Results.Clear();
         _seenResults.Clear();

@@ -17,10 +17,6 @@ public sealed class AppSettings
     /// <summary>MinerU Token（mineru.net 官方 Token，或自建服务的鉴权 Token）。</summary>
     public string MineruToken { get; set; } = "";
 
-    public Dictionary<string, string> Sources { get; set; } = new();
-
-    public Dictionary<string, string> Outputs { get; set; } = new();
-
     private static string Dir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DocTools");
 
