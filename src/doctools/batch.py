@@ -212,10 +212,10 @@ def _handle_remove_parts(op: str, p: OpParams) -> list[FileResult]:
 
 def _handle_office_convert(op: str, p: OpParams) -> list[FileResult]:
     plan = build_convert_plan(p.src, p.dst, p.recursive, p.output_is_dir, FORMAT_SUFFIXES[op])
-    from doctools.office import OfficeConverter  # 惰性：pywin32 仅 Windows
+    from doctools.office_engine import create_pdf_engine  # 惰性：COM / LibreOffice 双后端
 
-    with OfficeConverter() as converter:
-        return process_batch(plan, on_progress=p.on_progress, worker=converter.convert)
+    with create_pdf_engine() as engine:
+        return process_batch(plan, on_progress=p.on_progress, worker=engine.convert)
 
 
 def _handle_pdf_to_office(op: str, p: OpParams) -> list[FileResult]:

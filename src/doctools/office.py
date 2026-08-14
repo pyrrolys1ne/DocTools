@@ -38,6 +38,29 @@ _RETRYABLE_HRESULTS = (-2147418111, -2147417848)  # RPC_E_CALL_REJECTED / CO_E_R
 _MAX_RETRIES = 5
 
 
+def com_available() -> bool:
+    """轻量探测本机是否装了 Microsoft Office（注册表 CLSID，不启动进程）。"""
+    import sys
+
+    if sys.platform != "win32":
+        return False
+    try:
+        import importlib.util
+
+        if importlib.util.find_spec("win32com") is None:
+            return False
+        import winreg
+    except Exception:  # noqa: BLE001 - 探测失败视为不可用
+        return False
+    for app_name in ("Word", "PowerPoint"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"{app_name}.Application\\CLSID"):
+                return True
+        except OSError:
+            continue
+    return False
+
+
 class OfficeConverter:
     """持有一个 Word / PowerPoint 实例，批量转换后统一退出。
 

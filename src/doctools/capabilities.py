@@ -2,19 +2,15 @@
 
 参照飞鼠 ``GET /api/capabilities`` 设计：CLI / Web / 桌面端共享同一探测
 函数，桌面端据此禁用不可用功能的按钮，避免用户点下去才报错。
-探测保持轻量：只查模块存在性与注册表 CLSID，不启动任何进程。
+探测保持轻量：只查模块存在性、注册表 CLSID 与文件存在性，不启动任何进程。
 """
 
 from __future__ import annotations
 
 import importlib.util
-import sys
 
-try:
-    import winreg  # 仅 Windows
-except ImportError:  # pragma: no cover - 非 Windows 分支
-    winreg = None  # type: ignore[assignment]
-
+from doctools.libreoffice import soffice_available
+from doctools.office import com_available
 from doctools.resource_policy import LIMITS
 
 
@@ -26,25 +22,16 @@ def _module_available(name: str) -> bool:
         return False
 
 
-def _office_com_available(app_name: str) -> bool:
-    """查注册表 ``<App>.Application\\CLSID`` 是否存在，不启动 Office 进程。"""
-    if sys.platform != "win32" or winreg is None:
-        return False
-    if not _module_available("win32com"):
-        return False
-    try:
-        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"{app_name}.Application\\CLSID"):
-            return True
-    except OSError:
-        return False
-
-
 def get_capabilities() -> dict:
     """返回 ``{"engines": {...}, "limits": {...}}`` 能力清单。"""
+    office_com = com_available()
+    office_libreoffice = soffice_available()
     return {
         "engines": {
-            # word-to-pdf / ppt-to-pdf：Word 或 PowerPoint 任一可用即整体可用
-            "office": _office_com_available("Word") or _office_com_available("PowerPoint"),
+            # word-to-pdf / ppt-to-pdf：COM 或 LibreOffice 任一可用即整体可用
+            "office": office_com or office_libreoffice,
+            "office_com": office_com,
+            "office_libreoffice": office_libreoffice,
             "pdf2docx": _module_available("pdf2docx"),
             "pymupdf": _module_available("fitz"),
             "pypdf": _module_available("pypdf"),
