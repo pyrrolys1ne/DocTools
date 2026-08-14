@@ -471,6 +471,38 @@ def pdf_to_excel_cmd(
     )
 
 
+@app.command("pdf-to-markdown")
+def pdf_to_markdown_cmd(
+    input_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        help="输入的 PDF 文件或包含 .pdf 的目录",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="单文件时指定输出文件路径；目录时指定输出目录。默认在源路径旁生成同名 .md",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="递归处理子目录中的 .pdf，输出目录镜像源目录结构",
+    ),
+) -> None:
+    """用 MinerU 解析 PDF 为 Markdown（需配置 DOCTOOLS_MINERU_API_URL）。"""
+    _run_operation_report(
+        "pdf-to-markdown",
+        source_path=str(input_path),
+        output_path=str(output) if output else "",
+        recursive=recursive,
+    )
+
+
 @app.command("merge-pdf")
 def merge_pdf_cmd(
     files: list[Path] = typer.Argument(

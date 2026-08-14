@@ -41,6 +41,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", inputCategory: "pdf"),
             new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToPpt", inputCategory: "pdf"),
             new("pdf-to-excel", "PDF 转 Excel", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", inputCategory: "pdf"),
+            new("pdf-to-markdown", "PDF 解析（MinerU）", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", requiresEngine: "mineru", inputCategory: "pdf"),
             new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages, "PDF 转换", "Icon.PdfToImages", inputCategory: "pdf"),
             new("merge-pdf", "合并 PDF", new[] { ".pdf" }, OperationKind.Merge, "PDF 工具", "Icon.MergePdf", inputCategory: "pdf"),
             new("split-pdf", "拆分 PDF", new[] { ".pdf" }, OperationKind.Split, "PDF 工具", "Icon.SplitPdf", inputCategory: "pdf"),
@@ -176,7 +177,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 op.IsAvailable = available;
                 op.UnavailableReason = available
                     ? null
-                    : $"未检测到 Microsoft Office，{op.Label}不可用。请安装 Office 后重启。";
+                    : op.RequiresEngine switch
+                    {
+                        "office" => "未检测到 Office 或 LibreOffice，此功能不可用。",
+                        "mineru" => "未配置 MinerU API（DOCTOOLS_MINERU_API_URL），此功能不可用。",
+                        _ => $"缺少引擎 {op.RequiresEngine}，此功能不可用。",
+                    };
             }
         }
         catch (Exception ex)
@@ -228,6 +234,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         "pdf-to-word" => "PDF 转 Word（扫描件自动 OCR）",
         "pdf-to-ppt" => "PDF 每页渲染为一张幻灯片",
         "pdf-to-excel" => "PDF 表格提取到 Excel（每表一个 sheet）",
+        "pdf-to-markdown" => "MinerU 解析 PDF 为 Markdown（需配置 API）",
         "pdf-to-images" => "PDF 每页导出一张 PNG",
         "compress-images" => "JPEG 重编码，其余格式转优化 PNG",
         "convert-images" => "图片格式互转（png/jpg/webp/bmp/gif/tiff）",

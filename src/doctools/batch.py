@@ -252,6 +252,18 @@ def _handle_pdf_to_excel(op: str, p: OpParams) -> list[FileResult]:
     return process_batch(plan, on_progress=p.on_progress, worker=pdf_to_excel)
 
 
+def _handle_pdf_to_markdown(op: str, p: OpParams) -> list[FileResult]:
+    plan = build_convert_plan(
+        p.src, p.dst, p.recursive, p.output_is_dir,
+        suffixes=(".pdf",),
+        out_suffix=".md",
+        default_out_dir="markdown",
+    )
+    from doctools.mineru import parse_pdf  # 惰性：requests 可选
+
+    return process_batch(plan, on_progress=p.on_progress, worker=parse_pdf)
+
+
 def _handle_image_to_pdf(op: str, p: OpParams) -> list[FileResult]:
     from doctools.images import merge_images_to_pdf  # 惰性
 
@@ -329,6 +341,7 @@ OPERATION_HANDLERS: dict[str, Callable[[str, OpParams], list[FileResult]]] = {
     "pdf-to-ppt": _handle_pdf_to_office,
     "pdf-to-images": _handle_pdf_to_images,
     "pdf-to-excel": _handle_pdf_to_excel,
+    "pdf-to-markdown": _handle_pdf_to_markdown,
     "image-to-pdf": _handle_image_to_pdf,
     "compress-images": _handle_compress_images,
     "convert-images": _handle_convert_images,

@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 
 from doctools.libreoffice import soffice_available
+from doctools.mineru import mineru_available
 from doctools.ocr import ocr_available
 from doctools.office import com_available
 from doctools.resource_policy import LIMITS
@@ -40,6 +41,7 @@ def get_capabilities() -> dict:
             "python_docx": _module_available("docx"),
             "python_pptx": _module_available("pptx"),
             "ocr": ocr_available(),
+            "mineru": mineru_available(),
         },
         "limits": LIMITS,
     }
