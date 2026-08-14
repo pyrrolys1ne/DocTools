@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install Python deps
-        run: pip install -e ".[web,office]" pyinstaller
+        run: pip install -e ".[web,office,ocr]" pyinstaller
       - name: Build docserver (PyInstaller)
         run: .\packaging\build_server.ps1
       - name: Build WPF client (dotnet publish)

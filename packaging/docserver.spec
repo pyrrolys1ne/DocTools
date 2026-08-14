@@ -8,7 +8,7 @@
 
 import os
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # PyInstaller 中相对路径以 spec 文件所在目录为基准，这里显式基于 SPECPATH。
 spec_dir = os.path.abspath(SPECPATH)
@@ -17,6 +17,7 @@ repo_root = os.path.abspath(os.path.join(spec_dir, ".."))
 # 可选：捆绑便携版 LibreOffice（若 bin/libreoffice 存在，随 docserver 分发，
 # 作为 word/ppt→pdf 的兜底引擎）。运行时 find_soffice 会在 _MEIPASS 下探测。
 datas = []
+binaries = []
 libreoffice_dir = os.path.join(repo_root, "bin", "libreoffice")
 if os.path.isdir(libreoffice_dir):
     datas.append((libreoffice_dir, "libreoffice"))
@@ -36,10 +37,24 @@ hiddenimports += [
     "win32com.client",
 ]
 
+# 可选：OCR（RapidOCR + onnxruntime + 模型）。仅当安装了 doctools[ocr] 时收集，
+# 使扫描件 OCR 在发布包中可用；未安装则跳过，docserver 仍可正常构建。
+try:
+    import importlib.util
+
+    if importlib.util.find_spec("rapidocr") is not None:
+        for pkg in ("rapidocr", "onnxruntime", "openpyxl"):
+            pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+            datas += pkg_datas
+            binaries += pkg_binaries
+            hiddenimports += pkg_hidden
+except Exception:  # noqa: BLE001 - 可选依赖收集失败不应中断打包
+    pass
+
 a = Analysis(
     [os.path.join(spec_dir, "docserver_entry.py")],
     pathex=[repo_root, os.path.join(repo_root, "src")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
