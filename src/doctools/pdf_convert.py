@@ -80,11 +80,41 @@ def _write_fallback_docx(src: Path, dst: Path) -> None:
     document.save(str(dst))
 
 
+def _ocr_fallback_docx(src: Path, dst: Path) -> str:
+    """扫描件 OCR 回退：渲染每页 → RapidOCR 识别 → 生成纯文本段落 docx。"""
+    from doctools.ocr import ocr_available, ocr_pdf_page  # 惰性
+
+    if not ocr_available():
+        raise DoctoolsError(
+            PDF_NO_TEXT,
+            "这个 PDF 没有可提取的文字，可能是扫描版图片 PDF，需要 OCR 识别，"
+            "但 OCR 引擎未启用。请安装：pip install \"doctools[ocr]\"",
+            "This PDF has no extractable text and OCR is unavailable. "
+            'Install: pip install "doctools[ocr]"',
+        )
+    import fitz  # noqa: PLC0415  # PyMuPDF
+    from docx import Document  # noqa: PLC0415
+
+    document = Document()
+    doc = fitz.open(str(src))
+    try:
+        for index, page in enumerate(doc, start=1):
+            document.add_heading(f"Page {index}", level=1)
+            text = ocr_pdf_page(page)
+            for line in text.splitlines():
+                if line.strip():
+                    document.add_paragraph(line.strip())
+    finally:
+        doc.close()
+    document.save(str(dst))
+    return "扫描件已通过 OCR 识别为可编辑文本（纯文本，无版式还原）。"
+
+
 def pdf_to_docx(src: Path, dst: Path) -> str | None:
     """把单个 PDF 转成 Word（作为 process_batch 的 worker 使用）。
 
-    返回附注（如回退说明），无附注时返回 None。全页无文字（扫描件）
-    抛 ``PDF_NO_TEXT``。
+    返回附注（如回退说明），无附注时返回 None。全页无文字（扫描件）时：
+    OCR 可用则自动 OCR 回退，否则抛 ``PDF_NO_TEXT``。
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
     import fitz  # noqa: PLC0415  # PyMuPDF
@@ -96,13 +126,7 @@ def pdf_to_docx(src: Path, dst: Path) -> str | None:
     finally:
         doc.close()
     if not has_text:
-        raise DoctoolsError(
-            PDF_NO_TEXT,
-            "这个 PDF 没有可提取的文字，可能是扫描版图片 PDF。"
-            "请先对扫描件做 OCR 后再转换（OCR 支持规划中）。",
-            "This PDF has no extractable text; it may be a scanned image PDF. "
-            "OCR support is planned.",
-        )
+        return _ocr_fallback_docx(src, dst)
 
     try:
         _convert_with_pdf2docx(src, dst)
