@@ -27,13 +27,15 @@
 | Word 去页眉 | `remove-headers` | 含文字旁横线（段落边框 + Header 样式边框） |
 | Word 去页脚 | `remove-footers` | 同上 |
 | Word 去页眉页脚 | `remove-headers-footers` | 一次完成 |
-| Word → PDF | `word-to-pdf` | 基于 Microsoft Office COM |
+| Word → PDF | `word-to-pdf` | 优先 Office COM，回退 LibreOffice |
 | PPT → PDF | `ppt-to-pdf` | 同上 |
 | 图片 → PDF | `image-to-pdf` | 目录内所有图片合成一个 PDF（每张一页） |
-| PDF → Word | `pdf-to-word` | 基于 pdf2docx，有损转换；引擎失败自动回退文字提取（扫描件需 OCR） |
+| PDF → Word | `pdf-to-word` | 基于 pdf2docx，有损转换；引擎失败回退文字提取；扫描件自动 OCR（需 `[ocr]`） |
 | PDF → PPT | `pdf-to-ppt` | 每页渲染为一张幻灯片 |
+| PDF → Excel | `pdf-to-excel` | 表格提取到一个 Excel（每张表一个 sheet） |
 | PDF → 图片 | `pdf-to-images` | 每页导出一张 PNG |
 | 图片压缩 | `compress-images` | JPEG 重编码，其余转优化 PNG，可选质量 |
+| 图片格式互转 | `convert-images` | png/jpg/webp/bmp/gif/tiff 互转 |
 | PDF 合并 | `merge-pdf` | 按命令行顺序合并为单个 PDF |
 | PDF 拆分 | `split-pdf` | 每页一个，或按自定义页码范围 |
 
@@ -43,7 +45,8 @@
 - **单文件失败不中断整批**，逐文件上报 OK/FAIL（带稳定错误码 `[CODE]`）；
 - **结构化错误码**：CLI / Web / 桌面端共用稳定错误码（如 `PDF_NO_TEXT`、`OFFICE_NOT_INSTALLED`、`RESOURCE_LIMIT_EXCEEDED`）；
 - **资源预算**：PDF 页数上限 1000、图片合并 100MP 像素预算等（可用 `DOCTOOLS_*` 环境变量调整）；
-- **Windows 桌面客户端**（WPF）：本地服务随包启动，无需安装 Python / Node；自动检测本机引擎能力，不可用的操作自动禁用并提示原因；支持检查更新与一键导出诊断报告。
+- **双引擎转 PDF**：Word/PPT → PDF 优先用本机 Microsoft Office COM（保真度最高），未装 Office 时自动回退 LibreOffice（系统安装版或内置便携版）；
+- **Windows 桌面客户端**（WPF）：卡片式主页按输入格式分类（PDF/Word/图片/PPT）；本地服务随包启动，无需安装 Python / Node；自动检测本机引擎能力，不可用的操作自动禁用；支持图片转 PDF 队列排序、检查更新与一键导出诊断报告。
 
 ## 环境要求
 
@@ -51,9 +54,8 @@
 |------|------|------|
 | Python | ≥ 3.10 | 核心库、CLI 与 Web API 运行环境 |
 | .NET 8 SDK（可选） | ≥ 8.0 | 构建桌面客户端（`packaging/build_client.ps1`） |
-| Microsoft Office（可选） | Windows 桌面版 | `word-to-pdf` / `ppt-to-pdf` 使用 COM 自动化 |
-
-## 安装
+| Microsoft Office（可选） | Windows 桌面版 | `word-to-pdf` / `ppt-to-pdf` 优先走 COM；未装则回退 LibreOffice |
+| LibreOffice（可选） | 便携版或系统安装 | `word-to-pdf` / `ppt-to-pdf` 的回退引擎 |
 
 从源码安装（推荐）：
 
@@ -68,7 +70,8 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -e ".[dev,web]"    # 完整安装（含测试工具与 Web 后端）
-pip install -e ".[office]"     # 启用 Word/PPT → PDF（需已安装 Office）
+pip install -e ".[office]"     # 启用 Word/PPT → PDF（优先 Office COM）
+pip install -e ".[ocr]"        # 启用扫描件 OCR（RapidOCR，模型首次运行自动下载）
 ```
 
 可用 extras：
@@ -79,6 +82,7 @@ pip install -e ".[office]"     # 启用 Word/PPT → PDF（需已安装 Office�
 | `dev` | pytest、reportlab、ruff |
 | `web` | FastAPI、uvicorn、pydantic-settings |
 | `office` | pywin32（Word/PPT → PDF，仅 Windows） |
+| `ocr` | rapidocr、onnxruntime（扫描件 OCR，模型首次运行自动下载） |
 
 ## 命令行使用
 
