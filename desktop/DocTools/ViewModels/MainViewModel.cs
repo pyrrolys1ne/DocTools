@@ -21,6 +21,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<OperationDef> Operations { get; }
     public ICollectionView OperationsView { get; }
+    public IReadOnlyList<CategoryDef> Categories { get; }
     public ObservableCollection<FileResult> Results { get; } = new();
     public ObservableCollection<string> MergeSources { get; } = new();
 
@@ -35,23 +36,37 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         Operations = new List<OperationDef>
         {
-            new("remove-headers", "去页眉", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeaders"),
-            new("remove-footers", "去页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveFooters"),
-            new("remove-headers-footers", "去页眉页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeadersFooters"),
-            new("word-to-pdf", "Word 转 PDF", new[] { ".docx", ".doc" }, OperationKind.Batch, "Office 转换", "Icon.WordToPdf", requiresEngine: "office"),
-            new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch, "Office 转换", "Icon.PptToPdf", requiresEngine: "office"),
-            new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord"),
-            new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToPpt"),
-            new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages, "PDF 转换", "Icon.PdfToImages"),
-            new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.ImageToPdf"),
-            new("compress-images", "图片压缩", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages"),
-            new("merge-pdf", "合并 PDF", new[] { ".pdf" }, OperationKind.Merge, "PDF 工具", "Icon.MergePdf"),
-            new("split-pdf", "拆分 PDF", new[] { ".pdf" }, OperationKind.Split, "PDF 工具", "Icon.SplitPdf"),
+            // PDF 类
+            new("pdf-to-word", "PDF 转 Word", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", inputCategory: "pdf"),
+            new("pdf-to-ppt", "PDF 转 PPT", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToPpt", inputCategory: "pdf"),
+            new("pdf-to-excel", "PDF 转 Excel", new[] { ".pdf" }, OperationKind.Batch, "PDF 转换", "Icon.PdfToWord", inputCategory: "pdf"),
+            new("pdf-to-images", "PDF 转图片", new[] { ".pdf" }, OperationKind.PdfToImages, "PDF 转换", "Icon.PdfToImages", inputCategory: "pdf"),
+            new("merge-pdf", "合并 PDF", new[] { ".pdf" }, OperationKind.Merge, "PDF 工具", "Icon.MergePdf", inputCategory: "pdf"),
+            new("split-pdf", "拆分 PDF", new[] { ".pdf" }, OperationKind.Split, "PDF 工具", "Icon.SplitPdf", inputCategory: "pdf"),
+            // Word 类
+            new("word-to-pdf", "Word 转 PDF", new[] { ".docx", ".doc" }, OperationKind.Batch, "Office 转换", "Icon.WordToPdf", requiresEngine: "office", inputCategory: "word"),
+            new("remove-headers", "去页眉", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeaders", inputCategory: "word"),
+            new("remove-footers", "去页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveFooters", inputCategory: "word"),
+            new("remove-headers-footers", "去页眉页脚", new[] { ".docx" }, OperationKind.Batch, "Word 清理", "Icon.RemoveHeadersFooters", inputCategory: "word"),
+            // 图片类
+            new("image-to-pdf", "图片转 PDF", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.ImageToPdf", inputCategory: "image"),
+            new("compress-images", "图片压缩", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages", inputCategory: "image"),
+            new("convert-images", "图片格式互转", new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff" }, OperationKind.Batch, "图片处理", "Icon.CompressImages", inputCategory: "image"),
+            // PPT 类
+            new("ppt-to-pdf", "PPT 转 PDF", new[] { ".pptx", ".ppt" }, OperationKind.Batch, "Office 转换", "Icon.PptToPdf", requiresEngine: "office", inputCategory: "ppt"),
         };
         SelectedOperation = Operations[0];
 
         OperationsView = CollectionViewSource.GetDefaultView(Operations);
         OperationsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(OperationDef.Group)));
+
+        Categories = new List<CategoryDef>
+        {
+            new("pdf", "PDF", "Icon.PdfToWord", "PDF 转 Word/PPT/Excel/图片，合并与拆分", Operations.Where(o => o.InputCategory == "pdf").ToList()),
+            new("word", "Word", "Icon.WordToPdf", "Word 转 PDF，去页眉页脚", Operations.Where(o => o.InputCategory == "word").ToList()),
+            new("image", "图片", "Icon.ImageToPdf", "图片转 PDF、压缩、格式互转", Operations.Where(o => o.InputCategory == "image").ToList()),
+            new("ppt", "PPT", "Icon.PptToPdf", "PPT 转 PDF", Operations.Where(o => o.InputCategory == "ppt").ToList()),
+        };
 
         Results.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ResultsCardVisible));
 
@@ -63,6 +78,79 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AddMergeFilesCommand = new RelayCommand(AddMergeFiles);
         ExportDiagnosticsCommand = new RelayCommand(ExportDiagnostics);
         CheckUpdatesCommand = new RelayCommand(CheckForUpdates);
+        SelectCategoryCommand = new RelayCommand<CategoryDef>(SelectCategory);
+        SelectOperationCommand = new RelayCommand<OperationDef>(SelectOperation);
+        BackCommand = new RelayCommand(GoBack);
+    }
+
+    // ---- 卡片式导航（主页 → 分类 → 操作）----
+
+    private enum AppView { Home, Category, Operation }
+
+    private AppView _currentView = AppView.Home;
+    private CategoryDef? _currentCategory;
+
+    public bool IsHomeVisible => _currentView == AppView.Home;
+    public bool IsCategoryVisible => _currentView == AppView.Category;
+    public bool IsOperationVisible => _currentView == AppView.Operation;
+    public CategoryDef? CurrentCategory => _currentCategory;
+    public string CurrentCategoryLabel => _currentCategory?.Label ?? "";
+    public bool CanGoBack => _currentView != AppView.Home;
+
+    public RelayCommand<CategoryDef> SelectCategoryCommand { get; }
+    public RelayCommand<OperationDef> SelectOperationCommand { get; }
+    public RelayCommand BackCommand { get; }
+
+    private void SelectCategory(CategoryDef? category)
+    {
+        if (category is null)
+        {
+            return;
+        }
+
+        _currentCategory = category;
+        _currentView = AppView.Category;
+        NotifyNavigation();
+    }
+
+    private void SelectOperation(OperationDef? operation)
+    {
+        if (operation is null)
+        {
+            return;
+        }
+
+        SelectedOperation = operation;
+        _currentView = AppView.Operation;
+        NotifyNavigation();
+    }
+
+    private void GoBack()
+    {
+        _currentView = _currentView switch
+        {
+            AppView.Operation => AppView.Category,
+            AppView.Category => AppView.Home,
+            _ => AppView.Home,
+        };
+        NotifyNavigation();
+    }
+
+    public void GoHome()
+    {
+        _currentView = AppView.Home;
+        _currentCategory = null;
+        NotifyNavigation();
+    }
+
+    private void NotifyNavigation()
+    {
+        OnPropertyChanged(nameof(IsHomeVisible));
+        OnPropertyChanged(nameof(IsCategoryVisible));
+        OnPropertyChanged(nameof(IsOperationVisible));
+        OnPropertyChanged(nameof(CurrentCategory));
+        OnPropertyChanged(nameof(CurrentCategoryLabel));
+        OnPropertyChanged(nameof(CanGoBack));
     }
 
     // ---- 引擎能力（/api/v1/capabilities）----
@@ -117,6 +205,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsSplitVisible));
             OnPropertyChanged(nameof(IsPdfToImagesVisible));
             OnPropertyChanged(nameof(IsCompressVisible));
+            OnPropertyChanged(nameof(IsConvertImagesVisible));
             ApplyRecents(value);
         }
     }
@@ -128,13 +217,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         "remove-headers" => "批量去除 Word 文档页眉",
         "remove-footers" => "批量去除 Word 文档页脚",
         "remove-headers-footers" => "一次完成去页眉与页脚",
-        "word-to-pdf" => "Word 转 PDF（需本机安装 Microsoft Office）",
-        "ppt-to-pdf" => "PPT 转 PDF（需本机安装 Microsoft Office）",
+        "word-to-pdf" => "Word 转 PDF（Office 或 LibreOffice）",
+        "ppt-to-pdf" => "PPT 转 PDF（Office 或 LibreOffice）",
         "image-to-pdf" => "目录内全部图片合成一个 PDF",
-        "pdf-to-word" => "PDF 转 Word",
+        "pdf-to-word" => "PDF 转 Word（扫描件自动 OCR）",
         "pdf-to-ppt" => "PDF 每页渲染为一张幻灯片",
-        "compress-images" => "JPEG 重编码，其余格式转优化 PNG",
+        "pdf-to-excel" => "PDF 表格提取到 Excel（每表一个 sheet）",
         "pdf-to-images" => "PDF 每页导出一张 PNG",
+        "compress-images" => "JPEG 重编码，其余格式转优化 PNG",
+        "convert-images" => "图片格式互转（png/jpg/webp/bmp/gif/tiff）",
         "merge-pdf" => "按添加顺序合并多个 PDF",
         "split-pdf" => "按页或自定义范围拆分 PDF",
         _ => "",
@@ -182,6 +273,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _pageRanges;
         set { _pageRanges = value; OnPropertyChanged(); }
     }
+
+    private string _targetFormat = "png";
+    public string TargetFormat
+    {
+        get => _targetFormat;
+        set { _targetFormat = value; OnPropertyChanged(); }
+    }
+
+    public bool IsConvertImagesVisible => SelectedOperation?.Id == "convert-images";
+
+    /// <summary>图片格式互转可选的目标格式。</summary>
+    public IReadOnlyList<string> ImageTargetFormats { get; } = new[] { "png", "jpg", "webp", "bmp", "gif", "tiff" };
 
     // ---- 运行状态 ----
 
@@ -511,6 +614,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 request.OutputPath = OutputPath.Trim();
                 request.Recursive = IsRecursive;
                 request.Quality = Quality;
+                request.TargetFormat = TargetFormat;
                 break;
             case OperationKind.Merge:
                 if (MergeSources.Count == 0)

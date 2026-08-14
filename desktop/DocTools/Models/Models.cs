@@ -14,9 +14,10 @@ public enum OperationKind
 }
 
 /// <summary>
-/// 操作定义（与后端 OPERATION_HANDLERS 对应的 12 个操作）。
+/// 操作定义（与后端 OPERATION_HANDLERS 对应的操作）。
 /// RequiresEngine：该操作依赖的引擎名（与 /api/v1/capabilities 的 engines 键对应），
 /// null 表示无依赖。IsAvailable 由 MainViewModel 加载 capabilities 后更新。
+/// InputCategory：输入文件格式分类（pdf/word/image/ppt），用于卡片式主页分组。
 /// </summary>
 public sealed class OperationDef : INotifyPropertyChanged
 {
@@ -27,7 +28,8 @@ public sealed class OperationDef : INotifyPropertyChanged
         OperationKind kind,
         string group,
         string iconKey,
-        string? requiresEngine = null)
+        string? requiresEngine = null,
+        string inputCategory = "other")
     {
         Id = id;
         Label = label;
@@ -36,6 +38,7 @@ public sealed class OperationDef : INotifyPropertyChanged
         Group = group;
         IconKey = iconKey;
         RequiresEngine = requiresEngine;
+        InputCategory = inputCategory;
     }
 
     public string Id { get; }
@@ -45,6 +48,7 @@ public sealed class OperationDef : INotifyPropertyChanged
     public string Group { get; }
     public string IconKey { get; }
     public string? RequiresEngine { get; }
+    public string InputCategory { get; }
 
     private bool _isAvailable = true;
     public bool IsAvailable
@@ -79,6 +83,25 @@ public sealed class OperationDef : INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+/// <summary>卡片式主页的大类（按输入文件格式分组）。</summary>
+public sealed class CategoryDef
+{
+    public CategoryDef(string id, string label, string iconKey, string description, IReadOnlyList<OperationDef> operations)
+    {
+        Id = id;
+        Label = label;
+        IconKey = iconKey;
+        Description = description;
+        Operations = operations;
+    }
+
+    public string Id { get; }
+    public string Label { get; }
+    public string IconKey { get; }
+    public string Description { get; }
+    public IReadOnlyList<OperationDef> Operations { get; }
+}
+
 /// <summary>POST /api/v1/jobs 请求体（字段名与后端 JobRequest 对齐）。</summary>
 public sealed class JobRequest
 {
@@ -90,6 +113,7 @@ public sealed class JobRequest
     [JsonPropertyName("sources")] public List<string> Sources { get; set; } = new();
     [JsonPropertyName("page_ranges")] public string PageRanges { get; set; } = "";
     [JsonPropertyName("quality")] public int Quality { get; set; } = 80;
+    [JsonPropertyName("target_format")] public string TargetFormat { get; set; } = "";
 }
 
 /// <summary>GET /api/v1/capabilities 响应（引擎可用性 + 资源预算）。</summary>
